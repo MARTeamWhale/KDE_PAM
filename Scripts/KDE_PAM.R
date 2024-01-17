@@ -45,7 +45,8 @@ performKDE <- function(data_sf, species_list, weight_col, buffer_percent, sigma_
       marks(points_ppp) <- data.frame(weights)
       
       # Kernel Density Estimation
-      kd_result <- density.ppp(points_ppp, sigma = bw.diggle(points_ppp), kernel = "quartic", weights = marks(points_ppp), dimyx = 1000, diggle = T)
+      kd_result <- density.ppp(points_ppp, sigma = bw.diggle(points_ppp),positive = T,
+                               kernel = "quartic", weights = marks(points_ppp), dimyx = 1000, diggle = T)
       
       # Convert to SpatRaster
       raster_kd <- rast(kd_result)

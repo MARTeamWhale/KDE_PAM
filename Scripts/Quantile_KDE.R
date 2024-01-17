@@ -20,9 +20,9 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   
 
   # Process the raster, change name of data layer to be standard across tifs
-  kde_stars <- st_as_stars(kde_raster, crs = crs(raster_crs)) %>%
+  kde_stars <- st_as_stars(kde_raster) %>%
     rename(KDE = names(st_as_stars(kde_raster))[1]) %>%
-    mutate(KDE = ifelse(KDE == 0, NA, KDE))
+    mutate(KDE = ifelse(KDE <= 0, NA, KDE))
   
   # Set the CRS for the stars object
   st_crs(kde_stars) <- raster_crs
@@ -34,13 +34,13 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   # Create quantile classes with NA values
   kde_quant <- mutate(kde_stars, breaks = cut(KDE, breaks_quant)) 
   kde_quant_rast <- rast(kde_quant[2])
-  plot(kde_quant_rast)
+  # plot(kde_quant_rast)
   
   # Convert raster to polygon and set the CRS from the raster
   kde_sf <- st_make_valid(st_as_sf(terra::as.polygons(kde_quant_rast), merge = TRUE))
   kde_sf <- st_set_crs(kde_sf, raster_crs)
   
-  plot(st_geometry(kde_sf))
+  
   
   # Clean and process the data
   kde_sf <- kde_sf %>%
@@ -49,6 +49,13 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
     mutate(quants = factor(quants)) %>%
     mutate(Quantile = c(0.05, 0.25, 0.50, 0.75, 0.95))
   
+  # Filter out NAs and the 0.05 quantile class
+  kde_sf <- kde_sf %>% filter(!is.na(quants))
+  
+  # kde_sf <- kde_sf %>%dplyr::filter(Quantile > 0.05)
+  
+  plot(st_geometry(kde_sf))
+  
   # Extract species name from file path
   species_name <- str_extract(basename(tif_file), "^[^_]+")
   
@@ -56,6 +63,33 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   output_path <- paste0(output_dir, species_name, "_KDE_Quant.shp")
   write_sf(kde_sf, output_path, overwrite = TRUE)
 }
+
+        #test
+        bb = rast("output/tif/Bb_kernel_density.tif")
+        plot(bb)
+        
+        kde_raster = bb
+        # Process the raster, change name of data layer to be standard across tifs
+        kde_stars <- st_as_stars(kde_raster) %>%
+          rename(KDE = names(st_as_stars(kde_raster))[1]) %>%
+          mutate(KDE = ifelse(KDE <= 0, NA, KDE))
+        
+        plot(kde_stars)
+        
+        # Calculate quantile breaks
+        breaks_quant <- mf_get_breaks(x = c(min(kde_stars$KDE, na.rm = TRUE), kde_stars$KDE), breaks = "q6")
+        breaks_quant <- breaks_quant[c(2,3,4,5,6,7)]
+        
+        # Create quantile classes with NA values
+        kde_quant <- mutate(kde_stars, breaks = cut(KDE, breaks_quant)) 
+        kde_quant_rast <- rast(kde_quant[2])
+        # plot(kde_quant_rast)
+        
+        # Convert raster to polygon and set the CRS from the raster
+        kde_sf <- st_make_valid(st_as_sf(terra::as.polygons(kde_quant_rast), as_points = F, merge = TRUE))
+        kde_sf <- st_set_crs(kde_sf, raster_crs)
+        
+        plot(st_geometry(kde_sf))
 
 # # Example usage for a single file
 # processKDE("output/tif/Bb_kernel_density.tif")
@@ -180,3 +214,5 @@ plotKDEMaps(shapefile_dir = "output/shapes/", land = landUTM, contour_data = con
 
 
 kde_sf_data <- st_read("output/shapes/Bb_KDE_Quant.shp")
+
+plot(st_geometry(kde_sf_data))
