@@ -3,191 +3,180 @@ options(scipen = 999)
 library(stars)
 library(mapsf)
 library(stringr)
+library(terra)
+library(dplyr)
+library(viridis)
 
-#NBW Map KDE --------
-Bb_KDE = rast(here::here("output/Bb_sf_kernel_density.tif"))
-plot(Bb_KDE)
+#Create shapefiles of Quantile bins for RASTER KDE --------
 
-#figure out quantiles excluding 0
-Bb_KDE = st_as_stars(Bb_KDE)%>%rename(KDE = Bb_sf_kernel_density.tif)%>%mutate(KDE = ifelse(KDE == 0, NA, KDE))
-breaks_quant = mf_get_breaks(x = c(min(Bb_KDE$KDE, na.rm = T),
-                                   Bb_KDE$KDE),  breaks = "q6")
-breaks_quant = c(breaks_quant[c(2,3,4,5,6,7)])
+processKDE <- function(tif_file, output_dir = "output/shapes/") {
 
-#do something funky to create quantile classes with NA values
-Bb_KDE_quant <- mutate(Bb_KDE, breaks = cut(KDE, breaks_quant)) 
-Bb_KDE_quant = rast(Bb_KDE_quant[2])
+  # Load and plot KDE raster
+  kde_raster <- rast(tif_file)
+  # Extract the CRS from the raster
+  # Extract the CRS from the raster and convert it to an sf-compatible format
+  raster_crs <- crs(kde_raster)  
+  plot(kde_raster)
+  
 
-plot((Bb_KDE_quant))
+  # Process the raster, change name of data layer to be standard across tifs
+  kde_stars <- st_as_stars(kde_raster, crs = crs(raster_crs)) %>%
+    rename(KDE = names(st_as_stars(kde_raster))[1]) %>%
+    mutate(KDE = ifelse(KDE == 0, NA, KDE))
+  
+  # Set the CRS for the stars object
+  st_crs(kde_stars) <- raster_crs
+  
+  # Calculate quantile breaks
+  breaks_quant <- mf_get_breaks(x = c(min(kde_stars$KDE, na.rm = TRUE), kde_stars$KDE), breaks = "q6")
+  breaks_quant <- breaks_quant[c(2,3,4,5,6,7)]
+  
+  # Create quantile classes with NA values
+  kde_quant <- mutate(kde_stars, breaks = cut(KDE, breaks_quant)) 
+  kde_quant_rast <- rast(kde_quant[2])
+  plot(kde_quant_rast)
+  
+  # Convert raster to polygon and set the CRS from the raster
+  kde_sf <- st_make_valid(st_as_sf(terra::as.polygons(kde_quant_rast), merge = TRUE))
+  kde_sf <- st_set_crs(kde_sf, raster_crs)
+  
+  plot(st_geometry(kde_sf))
+  
+  # Clean and process the data
+  kde_sf <- kde_sf %>%
+    mutate(quants = str_replace_all(breaks, "[\\(\\]]", "" )) %>%
+    mutate(quants = as.numeric(gsub(",.*", "", quants))) %>%
+    mutate(quants = factor(quants)) %>%
+    mutate(Quantile = c(0.05, 0.25, 0.50, 0.75, 0.95))
+  
+  # Extract species name from file path
+  species_name <- str_extract(basename(tif_file), "^[^_]+")
+  
+  # Save the shapefile
+  output_path <- paste0(output_dir, species_name, "_KDE_Quant.shp")
+  write_sf(kde_sf, output_path, overwrite = TRUE)
+}
 
-# raster to polygon
-
-Bb_KDEQ_ImHab = st_make_valid(st_as_sf(terra::as.polygons(Bb_KDE_quant), merge = T))
-
-plot(st_geometry(Bb_KDEQ_ImHab))
-
-#get rid of weird characters and make clean orderd factor for levels without hard coding
-Bb_KDEQ_ImHab = Bb_KDEQ_ImHab%>%mutate(quants = str_replace_all(breaks, "[\\(\\]]", "" ))%>%
-  mutate(quants = as.numeric(gsub(",.*", "", quants)))%>%mutate(quants = factor(quants))
-
-Bb_KDEQ_ImHab$quants
-
-Bb_KDEQ_ImHab = Bb_KDEQ_ImHab%>%mutate(Quantile = c(0.05, 0.25, 0.50, 0.75, 0.95))
-
-write_sf(Bb_KDEQ_ImHab, "output/KDE_NBW_Quant.shp")
-
-#only 50% and 95%
-breaks_quant = mf_get_breaks(x = c(min(Bb_KDE$KDE, na.rm = T),
-                                   Bb_KDE$KDE),  breaks = "q6")
-breaks_5090 = c(breaks_quant[c(4,6,7)])
-
-#do something funky to create quantile classes with NA values
-Bb_KDE_5090 <- mutate(Bb_KDE, breaks = cut(KDE, breaks_5090)) 
-Bb_KDE_5090 = rast(Bb_KDE_5090[2])
-
-plot((Bb_KDE_5090))
-
-# raster to polygon
-
-Bb_KDE_5090_sf = st_make_valid(st_as_sf(terra::as.polygons(Bb_KDE_5090), merge = T))
-
-plot(st_geometry(Bb_KDE_5090_sf))
-
-#get rid of weird characters and make clean orderd factor for levels without hard coding
-Bb_KDE_5090_sf = Bb_KDE_5090_sf%>%mutate(quants = str_replace_all(lyr.1, "[\\(\\]]", "" ))%>%
-  mutate(quants = as.numeric(gsub(",.*", "", quants)))%>%mutate(quants = factor(quants))
-
-Bb_KDE_5090_sf$quants
-
-Bb_KDE_5090_sf = Bb_KDE_5090_sf%>%mutate(Quantile = c(0.50, 0.95))
-
-write_sf(Bb_KDE_5090_sf, "Shapes/KDE/Bb_KDE_5090.shp")
+# # Example usage for a single file
+# processKDE("output/tif/Bb_kernel_density.tif")
 
 
-#SBW Map KDE --------
-SBW_KDE = rast(here::here("Shapes/KDE/KDE_SBW2.tif"))
-plot(SBW_KDE)
+# List of .tif files
+tif_files <- list.files("output/tif/", pattern = "\\.tif$", full.names = TRUE)
 
-#figure out quantiles excluding 0
-SBW_KDE = st_as_stars(SBW_KDE)%>%rename(KDE = KDE_SBW2.tif)%>%mutate(KDE = ifelse(KDE == 0, NA, KDE))
-breaks_quant = mf_get_breaks(x = c(min(SBW_KDE$KDE, na.rm = T),
-                                   SBW_KDE$KDE),  breaks = "q6")
-breaks_quant = c(breaks_quant[c(2,3,4,5,6,7)])
+# Process each .tif file
+for (tif_file in tif_files) {
+  processKDE(tif_file)
+}
 
-#do something funky to create quantile classes with NA values
-SBW_KDE_quant <- mutate(SBW_KDE, breaks = cut(KDE, breaks_quant)) 
-SBW_KDE_quant = rast(SBW_KDE_quant[2])
-
-plot((SBW_KDE_quant))
-
-# raster to polygon
-
-SBW_KDEQ_ImHab = st_make_valid(st_as_sf(terra::as.polygons(SBW_KDE_quant), merge = T))
-
-plot(st_geometry(SBW_KDEQ_ImHab))
-
-#get rid of weird characters and make clean orderd factor for levels without hard coding
-SBW_KDEQ_ImHab = SBW_KDEQ_ImHab%>%mutate(quants = str_replace_all(lyr.1, "[\\(\\]]", "" ))%>%
-  mutate(quants = as.numeric(gsub(",.*", "", quants)))%>%mutate(quants = factor(quants))
-
-SBW_KDEQ_ImHab$quants
-
-SBW_KDEQ_ImHab = SBW_KDEQ_ImHab%>%mutate(Quantile = c(0.05, 0.25, 0.50, 0.75, 0.95))
-
-write_sf(SBW_KDEQ_ImHab, "Shapes/KDE/KDE_SBW_Quant.shp")
-
-#only 50% and 95%
-breaks_quant = mf_get_breaks(x = c(min(SBW_KDE$KDE, na.rm = T),
-                                   SBW_KDE$KDE),  breaks = "q6")
-breaks_5090 = c(breaks_quant[c(4,6,7)])
-
-#do something funky to create quantile classes with NA values
-SBW_KDE_5090 <- mutate(SBW_KDE, breaks = cut(KDE, breaks_5090)) 
-SBW_KDE_5090 = rast(SBW_KDE_5090[2])
-
-plot((SBW_KDE_5090))
-
-# raster to polygon
-
-SBW_KDE_5090_sf = st_make_valid(st_as_sf(terra::as.polygons(SBW_KDE_5090), merge = T))
-
-plot(st_geometry(SBW_KDE_5090_sf))
-
-#get rid of weird characters and make clean orderd factor for levels without hard coding
-SBW_KDE_5090_sf = SBW_KDE_5090_sf%>%mutate(quants = str_replace_all(lyr.1, "[\\(\\]]", "" ))%>%
-  mutate(quants = as.numeric(gsub(",.*", "", quants)))%>%mutate(quants = factor(quants))
-
-SBW_KDE_5090_sf$quants
-
-SBW_KDE_5090_sf = SBW_KDE_5090_sf%>%mutate(Quantile = c(0.50, 0.95))
-
-write_sf(SBW_KDE_5090_sf, "Shapes/KDE/SBW_KDE_5090.shp")
-
-
-
-
+######
 #PLOT---------
+######
+# source("Scripts/load_basemap_shapes.R")
 
-#pallet
-predpal="mako"
-pal = rev(get(predpal)(7))
-show_col(pal)
-pal = c(pal[c(2,3,4,5,6)])
+species_names_map <- c(
+  Ha = "Northern bottlenose whale",
+  Mb = "Sowerby's beaked whale",
+  Bb = "Sei whale",
+  Ma = "Humpback whale",
+  Bp = "Fin whale",
+  Bm = "Blue whale"
+ )
 
-# Get the vertical and horizontal limits
-ext <- extent( Bb_KDEQ_ImHab )
-# Get x and y limits
-lims <- list( x=c(ext@xmin-100, ext@xmax+200000), y=c(ext@ymin-100, ext@ymax+10000) )
+plotKDEMaps <- function(shapefile_dir, 
+                       land, contour_data, 
+                       beaked_stns, baleen_stns,
+                       output_dir, predpal = "mako", size = c(11, 8.5)) {
 
-#map it
-m1 <-ggplot() +
-  theme_bw()+
-  
-  # add land region--
-  geom_sf(  data = landUTM, color=NA, fill="grey50") +
-  # add contours--
-  geom_sf(data = cont_UTM%>%dplyr::filter(level %in% c(-200, -400, -1000, -2500, -3200)), col = "grey50", linewidth  = 0.2) +
-  # 
-  # #KDE - with quantiles
-  geom_sf(data  = SBW_KDEQ_ImHab, aes(fill = quants), col = NA,  alpha = .9, na.rm = T)+
-  
-  # SBW  PAM AMAR detects
-  geom_sf(data = BW_detectsUTM%>%filter( source == "AMAR"), col = "black", shape = 24,
-          fill = "yellow", size = 1.5, alpha = .5) +
-  
-  # set map limits
-  coord_sf(lims_method = "orthogonal",
-           xlim=lims$x, ylim=lims$y, expand = F
-  )+
+  # List all shapefiles in the directory
+  shapefiles <- list.files(shapefile_dir, pattern = "\\.shp$", full.names = TRUE)
   
   
-  # format axes
-  ylab("") + 
-  xlab("") +
   
-  #theme KDE
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    legend.position= c(0.1, 0.9) , legend.background = element_rect(fill = NA), 
-    legend.key = element_rect(fill = NA), plot.margin = margin(0, 0, 0, 0), 
-    plot.title = element_text(hjust=0.5), 
-    plot.subtitle  = element_text(hjust=0.5), axis.title = element_blank())+
   
-  scale_fill_manual(values = (pal),
-                    na.value = NA, na.translate = F,
-                    labels=c("0.05","0.25", "0.50","0.75","0.95" ) ,
-                    name = "",
-                    guide_legend(title.position = "bottom") )+
-  # add scale bar
-  annotation_scale(
-    location = "br",
-    width_hint = 0.25,
-    text_cex = 0.6,
-    bar_cols = c("grey40", "white")
-  ) 
+  # Loop through each shapefile and plot
+  for (shapefile in shapefiles) {
+    # Read the shapefile
+    kde_sf_data <- st_read(shapefile)
+    
+    # Extract species name from the filename
+    species_code <- str_extract(basename(shapefile), "^[^_]+")
+    
+    # Choose the appropriate stations data based on species
+    if(species_code %in% c("Ha", "Mb")) {
+      current_detects_data <- beaked_stns
+    } else {
+      current_detects_data<- baleen_stns
+    }
+    
+    # Extract coordinates for labeling
+    coords <- st_coordinates(current_detects_data)
+    
+    
+    # Get proper species name using the mapping
+    species_name <- species_names_map[species_code]
+    
+    # If species name is not found in the map, use the code as a fallback
+    if (is.null(species_name)) {
+      species_name <- species_code
+    }
+    
+    
+    # Extract the bounding box
+    bbox <- st_bbox(current_detects_data)
+    
+    # Extract individual limits
+    xmin <- bbox["xmin"]
+    xmax <- bbox["xmax"]
+    ymin <- bbox["ymin"]
+    ymax <- bbox["ymax"]
+    
+    # Use these limits for xlims and ylims
+    xlims <- c(xmin-10000, xmax+10000)
+    ylims <- c(ymin- 10000, ymax +10000)
+    
+    
+    
 
-m1
+  # Define palette
+  pal <- rev(get(predpal)(7))
+  pal <- c(pal[c(2,3,4,5,6)])
+  
+  # Plot gg------
+  gg_map <- ggplot() +
+    theme_bw() +
+    # geom_sf(data = contour_data %>% dplyr::filter(level %in% c(-200, -400, -1000, -2500, -3200)), col = "grey50", linewidth = 0.2) +
+    geom_sf(data = kde_sf_data, aes(fill = quants), col = NA, alpha = .9, na.rm = TRUE) +
+    geom_sf(data = current_detects_data, col = "black", shape = 24, fill = "yellow", size = 2, alpha = .5) +
+    # Add station labels
+    geom_text(data = current_detects_data, aes(x = coords[,1], y = coords[,2]+5000, label = site), 
+              color = "white", size = 3, vjust = 0, position = position_dodge(0.9)) +  # Adjust as needed
+    geom_sf(data = land, color = NA, fill = "grey50") +
+    coord_sf(lims_method = "orthogonal", xlim = xlims, ylim = ylims, crs = UTM20, expand = T) +
+    # Add species name as title 
+    labs(title = paste("KDE Map for", species_name)) +
+    
+     ylab("") + 
+    xlab("") +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = c(0.1, 0.9), 
+          legend.background = element_rect(fill = NA), legend.key = element_rect(fill = NA), plot.margin = margin(0, 0, 0, 0), 
+          plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), axis.title = element_blank()) +
+    scale_fill_manual(values = pal, na.value = NA, na.translate = FALSE, labels = c("0.05","0.25", "0.50","0.75","0.95"), 
+                      name = "", guide_legend(title.position = "bottom")) +
+    annotation_scale(location = "br", width_hint = 0.25, text_cex = 0.6, bar_cols = c("grey40", "white"))
+  
+  # Output file name
+  output_file <- paste0(output_dir, basename(shapefile), ".png")
+  
+  # Save the plot
+  ggsave(output_file, gg_map, width = size[1], height = size[2], units = "in")
+  }
+}
+
+plotKDEMaps(shapefile_dir = "output/shapes/", land = landUTM, contour_data = cont_UTM, 
+            beaked_stns = beaked_stns,
+            baleen_stns = baleen_stns,
+            output_dir = "output/FIGS/")
 
 
-ggsave(here::here("FIGS/Fig6h_SBW_KDE.png"), m1, width = 11, height = 8.5, units = "in")
+kde_sf_data <- st_read("output/shapes/Bb_KDE_Quant.shp")
