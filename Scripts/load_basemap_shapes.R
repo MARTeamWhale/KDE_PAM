@@ -7,7 +7,7 @@ library(mapsf)
 library(classInt)
 
 #projections------
-UTM20 <- CRS("+init=epsg:32620") # CODE FOR UTM Zone 20
+UTM20 <- terra::crs("+init=epsg:32620") # CODE FOR UTM Zone 20
 # UTM21 <- CRS("+init=epsg:32621") # CODE FOR UTM Zone 21
 prj <- CRS("+init=epsg:4326") # EPSG code for WGS84
 
@@ -27,7 +27,7 @@ plot(st_geometry(stations))
 crs(stations)
 
 # bound boxes for plots / study areas -----
-GEO_BOUND =  st_bbox( c(xmin = -70,ymin = 38, xmax = -40, ymax =55 ), crs = st_crs(4326))%>%
+GEO_BOUND =  st_bbox( c(xmin = -75,ymin = 38, xmax = -40, ymax =60 ), crs = st_crs(4326))%>%
   st_as_sfc()%>% st_sf()
 
 
