@@ -29,7 +29,7 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   kde_values <- values(kde_raster)
   
   # Calculate quantile breaks (excluding NA values)
-  probs = c(0.5, 0.75, 0.95, 1)
+  probs = c(0.5, 0.75, 0.8, 0.85,0.9, 0.95, 1)
   quantiles <- quantile(kde_values, probs = probs, type = 6, na.rm = TRUE)
   
   # Cut the values into quantile classes
@@ -59,6 +59,9 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
       quants.1 == 1  ~ paste(probs[1]*100, "%"),
       quants.1 == 2  ~ paste(probs[2]*100, "%"),
       quants.1 == 3 ~ paste(probs[3]*100, "%"),
+                            quants.1 == 4 ~ paste(probs[4]*100, "%"),
+      quants.1 == 5 ~ paste(probs[5]*100, "%"),
+      quants.1 == 6 ~ paste(probs[6]*100, "%"),
       TRUE                       ~ "Other"
     ))
 
@@ -71,17 +74,17 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
 }
 
         
-# # Example usage for a single file
-processKDE("output/tif/Bb_kernel_density.tif")
-
-
-# List of .tif files
-tif_files <- list.files("output/tif/", pattern = "\\.tif$", full.names = TRUE)
-
-# Process each .tif file
-for (tif_file in tif_files) {
-  processKDE(tif_file)
-}
+        # # Example usage for a single file---------
+        processKDE("output/tif/Bb_kernel_density.tif")
+        
+        
+        # List of .tif files------
+        tif_files <- list.files("output/tif/", pattern = "\\.tif$", full.names = TRUE)
+        
+        # Process each .tif file
+        for (tif_file in tif_files) {
+          processKDE(tif_file)
+        }
 
 
 

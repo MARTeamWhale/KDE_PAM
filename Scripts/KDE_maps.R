@@ -21,9 +21,6 @@ plotKDEMaps <- function(shapefile_dir,
   # List all shapefiles in the directory
   shapefiles <- list.files(shapefile_dir, pattern = "\\.shp$", full.names = TRUE)
   
-  
-  
-  
   # Loop through each shapefile and plot
   for (shapefile in shapefiles) {
     # Read the shapefile
@@ -69,10 +66,13 @@ plotKDEMaps <- function(shapefile_dir,
     
     
     # Define palette
-    pal <- rev(get(predpal)(7))
-    pal <- c(pal[c(2,3,5)])
+    pal <- rev(get(predpal)(6))
+    # pal <- c(pal[c(2,3,5)])
     
     # scales::show_col(pal)
+    
+    #define labels
+    unique_quantiles <- sort(unique(kde_sf_data$Quantile))
     
     # Plot gg------
     gg_map <- ggplot() +
@@ -93,7 +93,7 @@ plotKDEMaps <- function(shapefile_dir,
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = c(0.1, 0.9), 
             legend.background = element_rect(fill = NA), legend.key = element_rect(fill = NA), plot.margin = margin(0, 0, 0, 0), 
             plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), axis.title = element_blank()) +
-      scale_fill_manual(values = pal, na.value = NA, na.translate = FALSE, labels = c( "0.50","0.75","0.95"), 
+      scale_fill_manual(values = pal, na.value = NA, na.translate = FALSE, labels = unique_quantiles, 
                         name = "", guide_legend(title.position = "bottom")) +
       annotation_scale(location = "br", width_hint = 0.25, text_cex = 0.6, bar_cols = c("grey40", "white"))
     
