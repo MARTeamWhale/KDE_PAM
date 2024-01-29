@@ -5,7 +5,7 @@ source("Scripts/load_basemap_shapes.R")
 pacman::p_load(sf, tidyverse, readxl, here, leaflet, scales, terra, ggrepel, viridis, ggspatial)
 
 # INPUTS NEED TO BE CSV files, file names are specified in quotations here:-----
-input_file <-"Blue_Sei_Fin_Humpback_ForLaura.csv"
+input_file <-"Dolphins_Pilot_forLaura.csv"
 species = "speciesCodes.csv" 
 
 whale_data =  read_csv(here("input", input_file), col_types = cols(.default ="c"))

@@ -11,6 +11,8 @@ library(classInt)
 
 #Create shapefiles of Quantile bins for RASTER KDE --------
 
+
+
 processKDE <- function(tif_file, output_dir = "output/shapes/") {
 
   # Load and plot KDE raster
@@ -27,7 +29,8 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   kde_values <- values(kde_raster)
   
   # Calculate quantile breaks (excluding NA values)
-  quantiles <- quantile(kde_values, probs = c(0.5, 0.75, 0.95, 1), type = 6, na.rm = TRUE)
+  probs = c(0.5, 0.75, 0.95, 1)
+  quantiles <- quantile(kde_values, probs = probs, type = 6, na.rm = TRUE)
   
   # Cut the values into quantile classes
   kde_binned_values <- cut(kde_values, breaks = quantiles, include.lowest = TRUE)
@@ -53,9 +56,9 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
     mutate(quants = as.numeric(gsub(",.*", "", quants))) %>%
     mutate(quants.1 = as.numeric(factor(quants))) %>%
     mutate(Quantile = case_when(
-      quants.1 == 1  ~ "50%",
-      quants.1 == 2  ~ "75%",
-      quants.1 == 3 ~ "95%",
+      quants.1 == 1  ~ paste(probs[1]*100, "%"),
+      quants.1 == 2  ~ paste(probs[2]*100, "%"),
+      quants.1 == 3 ~ paste(probs[3]*100, "%"),
       TRUE                       ~ "Other"
     ))
 
