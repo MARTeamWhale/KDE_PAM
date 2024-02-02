@@ -14,6 +14,7 @@ whale_data =  read_csv(here("input", input_file), col_types = cols(.default ="c"
 SP_data <- read_csv(here("input", species), col_types = cols(.default ="c"))
 WS_data = left_join(whale_data, SP_data)
 
+WS_data%>%group_by(COMMONNAME)%>%summarise(sp_n = n())
 
 # Map  sightings records---------
 # Create point shapefile from records

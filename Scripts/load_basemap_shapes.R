@@ -1,8 +1,8 @@
 # load shapefiles for KDE_PAM
 
 pacman::p_load(sp, terra, dplyr, sf, viridis, ggplot2, ggrepel, stringr, here, ggtext, readr, grid,
-               rnaturalearth, rnaturalearthdata, pals, tidyr, fuzzyjoin, patchwork,
-               ggforce, readr, raster, ggspatial, lubridate, stars, patchwork, scales, RColorBrewer, grafify)
+               pals, tidyr, fuzzyjoin, patchwork,
+               ggforce, readr, ggspatial, lubridate, stars, patchwork, scales, RColorBrewer, grafify)
 library(mapsf)
 library(classInt)
 
@@ -23,7 +23,7 @@ plot(st_geometry(baleen_stns))
 beaked_stns = read_sf("input/DOY.shp",crs =4326 )%>%st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
 
 stations = rbind(baleen_stns, beaked_stns)
-plot(st_geometry(stations))
+# plot(st_geometry(stations))
 crs(stations)
 
 # bound boxes for plots / study areas -----
@@ -34,7 +34,7 @@ GEO_BOUND =  st_bbox( c(xmin = -75,ymin = 38, xmax = -40, ymax =60 ), crs = st_c
 UTM_BOUND = st_bbox(GEO_BOUND)%>%st_as_sfc()%>% st_sf()%>%st_transform(UTM20)
 
 
-# bound box Gully SS data for inset-----
+# bound box SS data -----
 Bound_boxB <- st_bbox( c(xmin = -62,ymin = 40, xmax = -50, ymax =48 ), crs = st_crs(4326))
 Bound_boxB <- Bound_boxB %>%
   st_as_sfc()%>% #turns the bounding box into a sfc object, that just describes a specific geometry
@@ -82,16 +82,16 @@ cont_UTM = cont%>%st_transform(UTM20)%>%st_intersection(UTM_BOUND)
 
 ##IMP HAB 2019 area  --------
 
-nbw_ImHab2019 = read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/NBW_ImportantHabitat/NBW_2019ImpHab.shp"))%>%st_transform(4326)
+nbw_ImHab2019 = read_sf(here::here("~/CODE/shapefiles/ImpHabitat/Stanistreet2021/NBW_2019ImpHab.shp"))%>%st_transform(4326)
 # plot(st_geometry(nbw_ImHab2019))
 
 ###### Compile all conservation zone information?
 #OA MPAS
-ALL_MPAS = read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/DFO_MPAs/DFO_MPA_MPO_ZPM.shp"))
+ALL_MPAS = read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/OA_MPAs/DFO_MPA_MPO_ZPM.shp"))
 ALL_MPAS_UTM= ALL_MPAS%>%
   st_transform(UTM20) 
 #OECDS
-ALL_MPAS2 = read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/DFO_OEA/DFO_OEABCM_MPO_AMCEZ.shp"))
+ALL_MPAS2 = read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/OECMS/DFO_OECM_MPO_AMCEZ.shp"))
 ALL_MPAS2_UTM= ALL_MPAS2%>%
   st_transform(UTM20) 
 #O&G exclusions
@@ -111,7 +111,7 @@ Fundian_UTM=Fundian%>%
   st_transform(UTM20)
 
 ##CH - No Zone 1-------
-NBW_CH <- read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/NBW_CH/NorthernBottlenoseWhale_CH.shp"))
+NBW_CH <- read_sf(here::here("~/CODE/shapefiles/SAR_CH/NBW_CH/NorthernBottlenoseWhale_CH.shp"))
 NBW_CH_UTM=NBW_CH%>%
   st_transform(UTM20)
 

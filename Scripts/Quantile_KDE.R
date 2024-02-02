@@ -25,6 +25,8 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
  
   kde_raster[kde_raster <= 0] <- NA
   
+ 
+  
   # get all data values
   kde_values <- values(kde_raster)
   
@@ -75,11 +77,11 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
 
         
         # # Example usage for a single file---------
-        processKDE("output/tif/Bb_kernel_density.tif")
+        # processKDE("output/tif/Bb_kernel_density.tif")
         
         
         # List of .tif files------
-        tif_files <- list.files("output/tif/", pattern = "\\.tif$", full.names = TRUE)
+        tif_files <- list.files("output/tif/sights/", pattern = "\\.tif$", full.names = TRUE)
         
         # Process each .tif file
         for (tif_file in tif_files) {
@@ -88,39 +90,3 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
 
 
 
-
-
-#test---------
-Ha = rast("output/tif/Ha_kernel_density.tif")
-
-
-plot(Ha)
-kde_raster = Ha
-kde_raster[kde_raster <= 0] <- NA
-
-# get all data values
-kde_values <- values(kde_raster)
-
-# Calculate quantile breaks (excluding NA values)
-quantiles <- quantile(kde_values, probs = c(0.5, 0.75, 0.95, 1), type = 6, na.rm = TRUE)
-
-# Cut the values into quantile classes
-kde_binned_values <- cut(kde_values, breaks = quantiles, include.lowest = TRUE)
-
-# Create a new raster with these binned values
-kde_quant_rast <- kde_raster
-values(kde_quant_rast) <- kde_binned_values
-
-plot(kde_quant_rast)
-# Convert raster to polygon
-kde_sf <- st_as_sf(as.polygons(kde_quant_rast, values = T), merge = TRUE)
-
-plot(st_geometry(kde_sf))
-
-# # Clean and process the data
-names(kde_sf)[1]<-"quants"
-
-kde_sf <- kde_sf %>%
-  mutate(quants = str_replace_all(quants, "[\\(\\]\\[]", "" ))%>%
-  mutate(quants = as.numeric(gsub(",.*", "", quants))) %>%
-  mutate(quants = factor(quants)) 
