@@ -17,7 +17,7 @@ prj <- CRS("+init=epsg:4326") # EPSG code for WGS84
 baleen_stns = st_as_sf(read.csv("input/baleen_presence_days_laura.csv"), coords = c("longitude", "latitude"), crs =4326 )%>%
   st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
 
-plot(st_geometry(baleen_stns))
+# plot(st_geometry(baleen_stns))
 
 #beaked
 beaked_stns = read_sf("input/DOY.shp",crs =4326 )%>%st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
@@ -35,7 +35,7 @@ UTM_BOUND = st_bbox(GEO_BOUND)%>%st_as_sfc()%>% st_sf()%>%st_transform(UTM20)
 
 
 # bound box SS data -----
-Bound_boxB <- st_bbox( c(xmin = -62,ymin = 40, xmax = -50, ymax =48 ), crs = st_crs(4326))
+Bound_boxB <- st_bbox( c(xmin = -68,ymin = 40, xmax = -50, ymax =48 ), crs = st_crs(4326))
 Bound_boxB <- Bound_boxB %>%
   st_as_sfc()%>% #turns the bounding box into a sfc object, that just describes a specific geometry
   st_sf()

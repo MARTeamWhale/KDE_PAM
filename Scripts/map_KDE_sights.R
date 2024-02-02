@@ -2,7 +2,7 @@
 ######
 #PLOT---------
 ######
-# source("Scripts/load_basemap_shapes.R")
+ source("Scripts/load_basemap_shapes.R")
 
 
 plotKDEMaps <- function(shapefile_dir, 
@@ -20,8 +20,11 @@ plotKDEMaps <- function(shapefile_dir,
     # Extract species name from the filename
     species <- str_extract(basename(shapefile), "^(.*?)_KDE_Quant")
     
-    # Extract the bounding box
-    bbox <- st_bbox(Bound_boxBUTM)
+    # Extract the bounding box (same as KDE_sights)
+    bbox <- st_bbox( c(xmin = -67.5,ymin = 40, xmax = -55, ymax =47.5 ), crs = st_crs(4326))%>% st_as_sfc()%>% #turns the bounding box into a sfc object, that just describes a specific geometry
+      st_sf()%>%st_transform(UTM20)
+    
+    bbox = st_bbox(bbox)
     
     # Extract individual limits
     xmin <- bbox["xmin"]
