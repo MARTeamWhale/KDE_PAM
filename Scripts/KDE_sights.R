@@ -56,7 +56,12 @@ UTM20 <- crs("+init=epsg:32620") # CODE FOR UTM Zone 20
     WS_data_sf = st_as_sf(WS_data, coords= c("LONGITUDE","LATITUDE"), crs = sf::st_crs(4326) )%>%
       st_intersection(bbox)%>%st_transform(UTM20)
     
-    # plot(st_geometry(WS_data_sf%>%filter(COMMONNAME == "WHALE-SPERM")))
+    # plot(st_geometry(WS_data_sf%>%filter(SPECIES_CD_1 == "922")))
+    
+    
+    #filter out rare species of beaked whales
+    WS_data_sf = WS_data_sf%>%dplyr::filter(SPECIES_CD_1 != "925" , SPECIES_CD_1 != "924", SPECIES_CD_1 != "7041",
+                                              SPECIES_CD_1 !="7039")
     
     # Extract unique species names
     unique_species <- unique(WS_data_sf$COMMONNAME)
@@ -172,7 +177,7 @@ performKDE <- function(data_sf, unique_species, buffer_percent, sigma_func, outp
         # legend.text = element_text(size = 8)  # Adjust legend text size
         labs(fill = "", title =  species) +
         annotate("text", x = Inf, y = Inf, label = paste("Bandwidth:", round(sigma_val, 0)),
-                 hjust = 1.1, vjust = 2, size = 3, color = "white")+
+                 hjust = 1.5, vjust = 2, size = 3, color = "white")+
         coord_equal()
 
 

@@ -31,7 +31,7 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   kde_values <- values(kde_raster)
   
   # Calculate quantile breaks (excluding NA values)
-  probs = c(0.5, 0.75, 0.8, 0.85,0.9, 0.95, 1)
+  probs = c(0.50, 0.75, 0.8, 0.85,0.9, 0.95, 1)
   quantiles <- quantile(kde_values, probs = probs, type = 6, na.rm = TRUE)
   
   # Cut the values into quantile classes
@@ -77,7 +77,7 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
 
         
         # # Example usage for a single file---------
-        # processKDE("output/tif/Bb_kernel_density.tif")
+        # processKDE("output/tif/sights/WHALE-SOWERBY'S BEAKED_sights_KDE.tif")
         
         
         # List of .tif files------
