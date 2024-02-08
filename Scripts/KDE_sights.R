@@ -98,32 +98,24 @@ performKDE <- function(data_sf, unique_species, buffer_percent, sigma_func, outp
     current_sf <- data_sf[data_sf$COMMONNAME == species, ]
     
     if(nrow(current_sf) > 0) {
-      # coords <- st_coordinates(current_sf)
-      # 
-      # # Expand the extent
-      # x_range <- range(coords[, "X"])
-      # y_range <- range(coords[, "Y"])
-      # x_buffer <- (x_range[2] - x_range[1]) * buffer_percent
-      # y_buffer <- (y_range[2] - y_range[1]) * buffer_percent
-      # expanded_x_range <- c(x_range[1] - x_buffer, x_range[2] + x_buffer)
-      # expanded_y_range <- c(y_range[1] - y_buffer, y_range[2] + y_buffer)
-      # 
-      # 
-      # #make data into pp object
-      # window <- owin(xrange = x_range, yrange = y_range)
-      # points_ppp <- ppp(x = coords[,"X"], y = coords[,"Y"], window = window)
       
       species_coords <- st_coordinates(current_sf)
       
       # Create ppp object within the precomputed window
       points_ppp <- ppp(x = species_coords[,"X"], y = species_coords[,"Y"], window = window)
       
+      #check for duplicates
+      # print(sum(multiplicity(points_ppp)>1))
+      jitter_bur <- rjitter(points_ppp, retry=TRUE, nsim=1, drop=TRUE)
+      plot(jitter_bur)
+      
       # Apply the bandwidth function to the point pattern object
-      sigma_val <- sigma_func(points_ppp)
+      sigma_val <- sigma_func(jitter_bur)
       
       # Kernel Density Estimation
-      kd_result <- density.ppp(points_ppp, sigma = sigma_val, positive = T,
+      kd_result <- density.ppp(jitter_bur, sigma = sigma_val, positive = T,
                                kernel = "gaussian", dimyx = 500, diggle = T)
+      
       
       # Convert to SpatRaster
       raster_kd <- rast(kd_result)
