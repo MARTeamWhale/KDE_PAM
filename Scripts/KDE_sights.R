@@ -7,7 +7,8 @@
 options(scipen = 999)
 
     #library
-    pacman::p_load(sf, tidyverse, readxl, here, leaflet, scales, terra, ggrepel, viridis, ggspatial, spatstat, dplyr,patchwork)
+    pacman::p_load(sf, tidyverse, readxl, here, leaflet, 
+                   scales, terra, ggrepel, viridis, ggspatial, spatstat, dplyr,patchwork)
     
 
 #projections------
