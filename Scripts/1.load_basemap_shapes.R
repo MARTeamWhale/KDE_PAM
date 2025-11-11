@@ -1,30 +1,30 @@
 # load shapefiles for KDE_PAM
 
 pacman::p_load(sp, terra, dplyr, sf, viridis, ggplot2, ggrepel, stringr, here, ggtext, readr, grid,
-               pals, tidyr, fuzzyjoin, patchwork,
+               pals, tidyr, fuzzyjoin, patchwork,mapsf,classInt,
                ggforce, readr, ggspatial, lubridate, stars, patchwork, scales, RColorBrewer, grafify)
-library(mapsf)
-library(classInt)
 
 #projections------
 UTM20 <- terra::crs("+init=epsg:32620") # CODE FOR UTM Zone 20
-# UTM21 <- CRS("+init=epsg:32621") # CODE FOR UTM Zone 21
-prj <- CRS("+init=epsg:4326") # EPSG code for WGS84
+# UTM21 <-  terra::crs("+init=epsg:32621") # CODE FOR UTM Zone 21
+prj <-  terra::crs("+init=epsg:4326") # EPSG code for WGS84
+
+filepath = 'input/2025/baleen_presence_days_laura_2025.csv'
 
 
 # read in PAM AMAR STNS for plotting-------
 
-baleen_stns = st_as_sf(read.csv("input/baleen_presence_days_laura.csv"), coords = c("longitude", "latitude"), crs =4326 )%>%
+baleen_stns = st_as_sf(read.csv(filepath), coords = c("longitude", "latitude"), crs =4326 )%>%
   st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
 
-# plot(st_geometry(baleen_stns))
+ plot(st_geometry(baleen_stns))
 
-#beaked
-beaked_stns = read_sf("input/DOY.shp",crs =4326 )%>%st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
-
-stations = rbind(baleen_stns, beaked_stns)
-# plot(st_geometry(stations))
-crs(stations)
+# #beaked
+# beaked_stns = read_sf("input/DOY.shp",crs =4326 )%>%st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
+# 
+# stations = rbind(baleen_stns, beaked_stns)
+# # plot(st_geometry(stations))
+# crs(stations)
 
 # bound boxes for plots / study areas -----
 GEO_BOUND =  st_bbox( c(xmin = -75,ymin = 38, xmax = -40, ymax =60 ), crs = st_crs(4326))%>%
@@ -48,7 +48,7 @@ ext(Bound_boxBUTM)
 r <- terra::rast("~/CODE/shapefiles/Bathymetry/GEBCO_bathy/gebco_2020.tif")
 ext(r)
 crs(r)
-#plot(r)
+# plot(r)
 
 #need to downsample bc too big
 bathy = terra::aggregate(r, fact = 2)
@@ -80,12 +80,8 @@ cont_UTM = cont%>%st_transform(UTM20)%>%st_intersection(UTM_BOUND)
 # Northern bottlenose whale Critical Habitat designations from Species at Risk
 # https://open.canada.ca/data/en/dataset/db177a8c-5d7d-49eb-8290-31e6a45d786c
 
-##IMP HAB 2019 area  --------
 
-nbw_ImHab2019 = read_sf(here::here("~/CODE/shapefiles/ImpHabitat/Stanistreet2021/NBW_2019ImpHab.shp"))%>%st_transform(4326)
-# plot(st_geometry(nbw_ImHab2019))
-
-###### Compile all conservation zone information?
+###### Compile all conservation zone information
 #OA MPAS
 ALL_MPAS = read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/OA_MPAs/DFO_MPA_MPO_ZPM.shp"))
 ALL_MPAS_UTM= ALL_MPAS%>%
@@ -136,10 +132,6 @@ NAFOUTM = NAFO%>%st_transform(UTM20) %>%st_intersection(UTM_BOUND)
 
 # NAFO_label = NAFO_label%>%filter(!is.na(ZONE), ZONE !="3Pn", ZONE != "4Vn", ZONE != "4S",  ZONE != "4R")
 
-#just 3L boundary
-NAFO_3L <- read_sf(here::here("~/CODE/shapefiles/nafo_divisions/NAFO_3L.shp"))
-NAFO_3L_UTM = NAFO_3L%>%st_transform(UTM20)
-
 #EEZ------------
 EEZ <- read_sf("~/CODE/shapefiles/EEZ/EEZ_can.shp")
 EEZ_label = st_point_on_surface(EEZ)
@@ -153,15 +145,3 @@ sable_label = st_point_on_surface(sable)
 # get coordinates and add back to dataframe
 sable_label$Long<-st_coordinates(sable_label)[,1] # get coordinates
 sable_label$Lat<-st_coordinates(sable_label)[,2] # get coordinates
-
-
-
-#contours----
-cont <- as.contour(r, levels= c( -200, -350, -400, -500,-1000,-2000,-2500,-3000, -3200, -4000, -5000))
-cont <- st_as_sf(cont)%>%st_cast("LINESTRING")
-cont_UTM = cont%>%st_transform(UTM20)%>%st_intersection(UTM_BOUND)
-##plot(st_geometry(cont_UTM))
-# st_write(cont, "~/CODE/Mapping/shapefiles/GEBCO_bathy/contours.shp", append=TRUE)
-
-hab_1000 = cont%>%filter(level <= -500)
-##plot(st_geometry(nbw_SDM_bound_all))

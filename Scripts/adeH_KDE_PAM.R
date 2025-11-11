@@ -1,12 +1,8 @@
-library(adehabitatHR)
-library(sf)
-library(ggplot2)
-library(patchwork)
-library(sp)
+#trying another kernel function does not work as well due to being in SP
 
-# install.packages("adehabitatHR")
+pacman::p_load(adehabitatHR, sf, ggplot2, patchwork, sp)
 
-
+filepath = 'input/2025/baleen_presence_days_laura_2025.csv'
 
 adehab_KDE <- function(data_sf, species_list, weight_col, buffer_percent, output_dir = "output/tif/") {
   # Initialize a list to store plots
@@ -65,7 +61,7 @@ adehab_KDE <- function(data_sf, species_list, weight_col, buffer_percent, output
 }
 
 # Reading baleen whale data------
-baleen_PA <- read.csv('input/baleen_presence_days_laura.csv')
+baleen_PA <- read.csv(filepath)
 
 
 baleen_sf = baleen_PA%>%st_as_sf(coords = c(6,7), crs =4326 )%>%st_transform(crs = UTM20)

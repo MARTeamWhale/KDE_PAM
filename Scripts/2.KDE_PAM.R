@@ -1,22 +1,31 @@
 #
 #Script to read in PAM data on detections and export KDE surfaces of presence
 #January 11, 2024
+#update 2025
 
 # Load necessary libraries
-# install.packages("spatstat")
+
 options(scipen = 999)
 
-library(terra)
-library(spatstat)
-library(sf)
-library(dplyr)
-library(patchwork)
+pacman::p_load(terra,spatstat,sf,dplyr,patchwork, ggplot2)
+
+filepath = 'input/2025/baleen_presence_days_laura_2025.csv'
+
 
 #projections------
-UTM20 <- crs("+init=epsg:32620") # CODE FOR UTM Zone 20
+UTM20 <- "EPSG:32620" # CODE FOR UTM Zone 20
 
-#uses spatstat
-
+## For each species code in species_list code:
+      # Extracts that species’ points and computes a buffered bounding box.
+      # Builds a spatstat point pattern within that box.
+      # Pulls weights from weight_col and multiplies them by 10,000.
+      # Chooses a kernel bandwidth with a user-supplied function (bw.diggle).
+      # Runs a Gaussian kernel density estimate on a 1000×1000 grid with Diggle edge
+      # correction.
+      # Converts the result to a SpatRaster, stamps the CRS, normalizes values by that
+      # species’ own max, writes a GeoTIFF, and stores it in memory.
+      # After looping, it plots one panel per species with a common color scale and
+      # combines them with patchwork.
 
 performKDE <- function(data_sf, species_list, weight_col, buffer_percent, sigma_func, output_dir = "output/tif/") {
 
@@ -24,6 +33,7 @@ performKDE <- function(data_sf, species_list, weight_col, buffer_percent, sigma_
 
   # Initialize a list to store plots
   raster_list <- list()
+  sigma_store <- list() 
   global_min <- Inf
   global_max <- -Inf
   
@@ -51,8 +61,10 @@ performKDE <- function(data_sf, species_list, weight_col, buffer_percent, sigma_
       weights <- current_sf[[weight_col]]*10000
       marks(points_ppp) <- data.frame(weights)
       
-      # Apply the bandwidth function to the point pattern object
+      # Apply the bandwidth function to the point pattern object and store it
       sigma_val <- sigma_func(points_ppp)
+      sigma_store[[species]] <- sigma_val
+      
       
       # Kernel Density Estimation
       kd_result <- density.ppp(points_ppp, sigma = sigma_val, positive = T,
@@ -131,7 +143,7 @@ performKDE <- function(data_sf, species_list, weight_col, buffer_percent, sigma_
 # annotate("text", x = Inf, y = Inf, label = paste("Bandwidth:",round(sigma_val[1], 0), "/", round(sigma_val[2], 0)),
 
 # Reading baleen whale data------
-baleen_PA <- read.csv('input/baleen_presence_days_laura.csv')
+baleen_PA <- read.csv(filepath)
 
 # # Normalize the proportions within each group
 # baleen_PA <- baleen_PA %>%
@@ -146,32 +158,19 @@ baleen_sf = baleen_PA%>%st_as_sf(coords = c("longitude", "latitude"), crs =4326 
 
 
 # List of Baleen species-----
-#Bb = Sei, Bm = Blue, Bp = Fin, Mn = humpback
-species_list <- c("Bb", "Bm", "Bp", "Mn")
+#Bb = Sei, Bm = Blue, Bp = Fin, Mn = humpback, Ba = Minke, Eg = NARW
+baleen_PA%>%group_by(species)%>%summarise(count = n())
+
+species_list <- c("Bb", "Bm", "Bp", "Mn", "Eg","Ba")
 
 #run KDE function
 performKDE(data_sf = baleen_sf, species_list = species_list, 
            weight_col = "proportion_det", sigma_func = bw.diggle,  buffer_percent = .2)
 
 
-#read in NBW & SBW data for comparison
+#       QA TESTS--------
 
-bw_sf = read_sf("input/DOY.shp" )%>%st_transform(crs = UTM20)
-
-# List of Beaked species-----
-species_list <- c("Ha", "Mb")
-
-#run KDE function
-performKDE(data_sf = bw_sf, species_list = species_list, sigma_func = bw.diggle,
-           weight_col = "pr_DOY_", buffer_percent = .2)
-
-
-
-
-#       #TESTS--------
-
-raster_kd <- rast("output/tif/sights/DOLPHIN-WHITE-BEAKED_sights_KDE.tif")
-crs(raster_kd)
+raster_kd <- rast("output/tif/Bb_kernel_density.tif")
 # 
 # kde_df <- as.data.frame(raster_kd, xy = TRUE)%>%dplyr::filter(!is.na(lyr.1))
 # str(kde_df)
