@@ -15,6 +15,16 @@ filepath = 'input/2025/baleen_presence_days_laura_2025.csv'
 #projections------
 UTM20 <- "EPSG:32620" # CODE FOR UTM Zone 20
 
+# Read baleen whale PAM data------
+baleen_PA <- read.csv(filepath)
+baleen_sf = baleen_PA%>%st_as_sf(coords = c("longitude", "latitude"), crs =4326 )%>%st_transform(crs = UTM20)
+
+# Baleen species-----
+#Bb = Sei, Bm = Blue, Bp = Fin, Mn = humpback, Ba = Minke, Eg = NARW
+baleen_PA%>%group_by(species)%>%summarise(count = n())
+
+species_list <- c("Bb", "Bm", "Bp", "Mn", "Eg","Ba")
+
 ## For each species code in species_list code:
       # Extracts that species’ points and computes a buffered bounding box.
       # Builds a spatstat point pattern within that box.
@@ -62,13 +72,15 @@ performKDE <- function(data_sf, species_list, weight_col, buffer_percent, sigma_
       marks(points_ppp) <- data.frame(weights)
       
       # Apply the bandwidth function to the point pattern object and store it
-      sigma_val <- sigma_func(points_ppp)
+      sigma_val <- 10000
+        
+        # sigma_func(points_ppp) #bw.diggle (param set below)
       sigma_store[[species]] <- sigma_val
       
       
       # Kernel Density Estimation
       kd_result <- density.ppp(points_ppp, sigma = sigma_val, positive = T,
-                               kernel = "gaussian", weights = marks(points_ppp), dimyx = 1000, diggle = T)
+                               kernel = "gaussian", weights = marks(points_ppp), dimyx = 500, diggle = T)
       
       # Convert to SpatRaster
       raster_kd <- rast(kd_result)
@@ -93,7 +105,7 @@ performKDE <- function(data_sf, species_list, weight_col, buffer_percent, sigma_
       
       
       # Save the raster to a file
-      raster_filename <- paste0(output_dir, species, "_kernel_density.tif")
+      raster_filename <- paste0(output_dir,  "KDE_pam_", species,".tif")
       writeRaster(raster_kd, filename = raster_filename, overwrite = T)
     }
   }
@@ -135,44 +147,23 @@ performKDE <- function(data_sf, species_list, weight_col, buffer_percent, sigma_
   }
   # Combine all plots using patchwork
   plot_combined <- wrap_plots(plot_list, ncol = 2, guides = "collect")
-  return(plot_combined)
+  
+  list(plot = plot_combined,
+  bandwidths = sigma_store)
   
 }
 
 # sigma_func = bw.scott outputs 2 d values so need to change code annotation to:
 # annotate("text", x = Inf, y = Inf, label = paste("Bandwidth:",round(sigma_val[1], 0), "/", round(sigma_val[2], 0)),
 
-# Reading baleen whale data------
-baleen_PA <- read.csv(filepath)
-
-# # Normalize the proportions within each group
-# baleen_PA <- baleen_PA %>%
-#   group_by(species) %>%
-#   mutate(sumProp = sum(proportion_det),
-#     NormalizedProportion = proportion_det / sumProp
-#   ) %>%
-#   ungroup() # Always a good practice to ungroup after you're done
 
 
-baleen_sf = baleen_PA%>%st_as_sf(coords = c("longitude", "latitude"), crs =4326 )%>%st_transform(crs = UTM20)
-
-
-# List of Baleen species-----
-#Bb = Sei, Bm = Blue, Bp = Fin, Mn = humpback, Ba = Minke, Eg = NARW
-baleen_PA%>%group_by(species)%>%summarise(count = n())
-
-species_list <- c("Bb", "Bm", "Bp", "Mn", "Eg","Ba")
-
-#run KDE function
-performKDE(data_sf = baleen_sf, species_list = species_list, 
+#run KDE function------
+res = performKDE(data_sf = baleen_sf, species_list = species_list, 
            weight_col = "proportion_det", sigma_func = bw.diggle,  buffer_percent = .2)
 
+# Plot
+res$plot
 
-#       QA TESTS--------
-
-raster_kd <- rast("output/tif/Bb_kernel_density.tif")
-# 
-# kde_df <- as.data.frame(raster_kd, xy = TRUE)%>%dplyr::filter(!is.na(lyr.1))
-# str(kde_df)
-# summary(kde_df)
-
+# Bandwidths per species
+res$bandwidths

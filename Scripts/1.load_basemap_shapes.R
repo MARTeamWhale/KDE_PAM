@@ -17,7 +17,7 @@ filepath = 'input/2025/baleen_presence_days_laura_2025.csv'
 baleen_stns = st_as_sf(read.csv(filepath), coords = c("longitude", "latitude"), crs =4326 )%>%
   st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
 
- plot(st_geometry(baleen_stns))
+ # plot(st_geometry(baleen_stns))
 
 # #beaked
 # beaked_stns = read_sf("input/DOY.shp",crs =4326 )%>%st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
@@ -40,6 +40,7 @@ Bound_boxB <- Bound_boxB %>%
   st_as_sfc()%>% #turns the bounding box into a sfc object, that just describes a specific geometry
   st_sf()
 Bound_boxBUTM <- Bound_boxB%>%st_transform(UTM20)
+
 
 ext(Bound_boxBUTM)
 

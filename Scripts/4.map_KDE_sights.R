@@ -2,7 +2,7 @@
 ######
 #PLOT---------
 ######
- source("Scripts/load_basemap_shapes.R")
+ # source("Scripts/1.load_basemap_shapes.R")
 
 
 plotKDEMaps <- function(shapefile_dir, 
@@ -44,13 +44,13 @@ plotKDEMaps <- function(shapefile_dir,
     # scales::show_col(pal)
     
     #define labels
-    unique_quantiles <- sort(unique(kde_sf_data$Quantile))
+    unique_quantiles <- sort(unique(kde_sf_data$Quantil))
     
     # Plot gg------
     gg_map <- ggplot() +
       theme_bw() +
       geom_sf(data = contour_data %>% dplyr::filter(level %in% c(-200, -400, -1000, -2500, -3200)), col = "grey50", linewidth = 0.2) +
-      geom_sf(data = kde_sf_data, aes(fill = Quantile), col = NA, alpha = .9, na.rm = TRUE) +
+      geom_sf(data = kde_sf_data, aes(fill = Quantil), col = NA, alpha = .9, na.rm = TRUE) +
       
       geom_sf(data = land, color = NA, fill = "grey50") +
       coord_sf(lims_method = "orthogonal", xlim = xlims, ylim = ylims, crs = UTM20, expand = T) +
@@ -74,5 +74,5 @@ plotKDEMaps <- function(shapefile_dir,
   }
 }
 
-plotKDEMaps(shapefile_dir = "output/shapes/", land = landUTM, contour_data = cont_UTM, 
+plotKDEMaps(shapefile_dir = "output/shapes/sights/", land = landUTM, contour_data = cont_UTM, 
             output_dir = "output/FIGS/sights/")

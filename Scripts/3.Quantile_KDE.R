@@ -1,10 +1,15 @@
 # create shapefiles of kde density rasters by binning into quantiles similar to ArcGIS...
+#change input to change source maps
 
+
+# create shapefiles of kde density rasters by binning into quantiles
+#change input to change source maps
 options(scipen = 999)
 pacman::p_load(sf,stars, dplyr, stringr, terra, classInt)
-
+input = "output/tif/"
+output = "output/shapes/"
 # Create shapefiles of Quantile bins for RASTER KDE --------
-processKDE <- function(tif_file, output_dir = "output/shapes/") {
+processKDE <- function(tif_file, output_dir = output) {
   
   # Load KDE raster
   kde_raster <- rast(tif_file)
@@ -16,11 +21,11 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   kde_raster[kde_raster <= 0] <- NA
   
   # Define quantile probabilities
-  probs <- c(0.50, 0.75, 0.8, 0.85, 0.9, 0.95, 1)
+  probs <- c(.50,0.75, 0.85, 0.9, 0.95, 1)
   
   # Calculate quantile breaks (excluding NA values)
   kde_values <- values(kde_raster, mat = FALSE)
-  quantiles <- quantile(kde_values, probs = probs, type = 6, na.rm = TRUE)
+  quantiles <- quantile(kde_values, probs = probs, type = 6, na.rm = TRUE)#similar to arcgis cutoffs
   
   # Create labels for the quantile bins
   quant_labels <- paste0(probs[-length(probs)] * 100, "%")
@@ -56,7 +61,7 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   cat("Quantile values:", unique(kde_sf$Quantile), "\n")
   
   # Extract species name from file path
-  species_name <- str_extract(basename(tif_file), "^[^_]+")
+  species_name <- str_extract(basename(tif_file), "(?<=KDE_)[^\\.]+")
   
   # Ensure output directory exists
   if (!dir.exists(output_dir)) {
@@ -64,17 +69,15 @@ processKDE <- function(tif_file, output_dir = "output/shapes/") {
   }
   
   # Save the shapefile
-  output_path <- file.path(output_dir, paste0(species_name, "_KDE_Quant.shp"))
+  output_path <- file.path(output_dir, paste0( "KDE_", species_name,".shp"))
   write_sf(kde_sf, output_path, delete_dsn = TRUE)
   
   cat("Processed:", species_name, "\n\n")
   
   return(invisible(kde_sf))
 }
-
 # Process all .tif files------
-tif_files <- list.files("output/tif/", pattern = "\\.tif$", full.names = TRUE)
-
+tif_files <- list.files(input, pattern = "\\.tif$", full.names = TRUE)
 # Process each .tif file with error handling
 for (tif_file in tif_files) {
   tryCatch({
@@ -83,3 +86,4 @@ for (tif_file in tif_files) {
     cat("Error processing", basename(tif_file), ":", conditionMessage(e), "\n")
   })
 }
+

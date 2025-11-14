@@ -27,7 +27,7 @@ plotKDEMaps <- function(shapefile_dir,
     kde_sf_data <- st_read(shapefile, quiet = T)
     
     # Extract species name from the filename
-    species_code <- str_extract(basename(shapefile), "^[^_]+")
+    species_code <- str_extract(basename(shapefile), "(?<=KDE_pam_)[^\\.]+")
     
     # Choose the appropriate stations data based on species
       current_detects_data <-baleen_stns
