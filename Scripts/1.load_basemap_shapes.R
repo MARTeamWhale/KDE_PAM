@@ -9,13 +9,13 @@ UTM20 <- terra::crs("+init=epsg:32620") # CODE FOR UTM Zone 20
 # UTM21 <-  terra::crs("+init=epsg:32621") # CODE FOR UTM Zone 21
 prj <-  terra::crs("+init=epsg:4326") # EPSG code for WGS84
 
-filepath = 'input/2025/baleen_presence_days_laura_2025.csv'
+
 
 
 # read in PAM AMAR STNS for plotting-------
-
+filepath = 'input/2025/baleen_presence_days_laura_2025.csv'
 baleen_stns = st_as_sf(read.csv(filepath), coords = c("longitude", "latitude"), crs =4326 )%>%
-  st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
+  dplyr::group_by(site)%>%dplyr::summarise()
 
  # plot(st_geometry(baleen_stns))
 
@@ -35,7 +35,7 @@ UTM_BOUND = st_bbox(GEO_BOUND)%>%st_as_sfc()%>% st_sf()%>%st_transform(UTM20)
 
 
 # bound box SS data -----
-Bound_boxB <- st_bbox( c(xmin = -68,ymin = 40, xmax = -50, ymax =48 ), crs = st_crs(4326))
+Bound_boxB <- st_bbox( baleen_stns)
 Bound_boxB <- Bound_boxB %>%
   st_as_sfc()%>% #turns the bounding box into a sfc object, that just describes a specific geometry
   st_sf()

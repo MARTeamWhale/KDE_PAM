@@ -248,7 +248,7 @@ if(RUN_PAM || RUN_SIGHTINGS) {
     st_transform(crs = UTM20)
   
   # Create window from PAM station extents
-  pam_coords <- st_coordinates(baleen_sf)
+  pam_coords <- st_coordinates(Bound_boxBUTM)# created from PAM Station extents in load basemap.R
   x_range <- range(pam_coords[, "X"])
   y_range <- range(pam_coords[, "Y"])
   
@@ -373,7 +373,7 @@ if(RUN_PAM) {
     weight_col = "proportion_det",
     window = common_window,
     output_prefix = "pam",
-    threshold_quantile = 0.95,  
+    threshold_quantile = NULL,  
     sigma_val = 10000
   )
   

@@ -25,8 +25,7 @@ whale_data =  read_csv(here("input/2025/sights/", input_file), col_types = cols(
 SP_data <- read_csv(here("input", species), col_types = cols(.default ="c"))
 WS_data = left_join(whale_data, SP_data)
 # bound boxes for study area -----
-bbox = st_bbox( c(xmin = -67.5,ymin = 40, xmax = -55, ymax =47.5 ), crs = st_crs(4326))%>% st_as_sfc()%>% #turns the bounding box into a sfc object, that just describes a specific geometry
-  st_sf()
+bbox = Bound_boxB
 
 WS_data_sf = st_as_sf(WS_data, coords= c("LONGITUDE","LATITUDE"), crs = sf::st_crs(4326) )%>%
   st_intersection(bbox)%>%st_transform(UTM20)
@@ -55,12 +54,12 @@ WS_data_sf <- WS_data_sf %>%
 
 plotKDEMaps <- function(shapefile_dir, 
                         land, 
-                        contour_data, 
                         baleen_stns = NULL,
                         sighting_data = NULL,
                         output_dir, 
                         predpal = "mako", 
-                        size = c(11, 8.5)) {
+                        size = c(11, 8.5),
+                        exclude_quantiles = "50%") {  # NEW PARAMETER
   
   # List all shapefiles in the directory
   shapefiles <- list.files(shapefile_dir, pattern = "\\.shp$", full.names = TRUE)
@@ -137,6 +136,10 @@ plotKDEMaps <- function(shapefile_dir,
       next
     }
     
+    # FILTER OUT EXCLUDED QUANTILES BEFORE PROCESSING
+    kde_sf_data <- kde_sf_data %>%
+      filter(!Quantil %in% exclude_quantiles)
+    
     # Get unique quantiles and sort them properly
     unique_quantiles <- unique(kde_sf_data$Quantil)
     unique_quantiles <- unique_quantiles[!is.na(unique_quantiles)]
@@ -150,7 +153,7 @@ plotKDEMaps <- function(shapefile_dir,
     
     # Check if we have valid quantiles
     if (length(unique_quantiles) == 0) {
-      cat("Warning: No valid quantiles found. Skipping", filename, "\n")
+      cat("Warning: No valid quantiles found after filtering. Skipping", filename, "\n")
       next
     }
     
@@ -166,7 +169,7 @@ plotKDEMaps <- function(shapefile_dir,
     # Start building the plot
     gg_map <- ggplot() +
       theme_bw() +
-      geom_sf(data = contour_data %>% 
+      geom_sf(data = cont_UTM %>% 
                 dplyr::filter(level %in% c(-200, -400, -1000, -2500, -3200)), 
               col = "grey50", linewidth = 0.2) +
       geom_sf(data = kde_sf_data, aes(fill = Quantil), col = NA, alpha = .9, na.rm = TRUE)
@@ -205,6 +208,9 @@ plotKDEMaps <- function(shapefile_dir,
     
     # Add station points and labels ONLY for PAM data
     if (is_pam && !is.null(baleen_stns)) {
+      
+      cat("\n=== Processing PAM Station Labels ===\n")
+      
       # Add truncated site column
       current_detects_data <- baleen_stns %>%
         mutate(site_short = case_when(
@@ -217,23 +223,44 @@ plotKDEMaps <- function(shapefile_dir,
           TRUE ~ substr(site, 1, 3)
         ))
       
+      cat("Total detects:", nrow(current_detects_data), "\n")
+      
       # Create unique stations (one per truncated site name)
       unique_stations <- current_detects_data %>%
         group_by(site_short) %>%
         slice(1) %>%
         ungroup()
       
-      # Extract coordinates for the unique stations
-      unique_coords <- st_coordinates(unique_stations)
+      cat("Unique stations:", nrow(unique_stations), "\n")
+      cat("Station names:", paste(unique_stations$site_short, collapse=", "), "\n")
       
-      # Add station points and labels to map
+      # Extract coordinates
+      station_coords <- st_coordinates(unique_stations)
+      cat("Coordinate matrix dimensions:", dim(station_coords), "\n")
+      cat("Coordinate column names:", colnames(station_coords), "\n")
+      
+      # Create label dataframe using numeric indexing
+      label_df <- data.frame(
+        x = as.numeric(station_coords[, 1]),
+        y = as.numeric(station_coords[, 2]) + 5000,
+        label = as.character(unique_stations$site_short),
+        stringsAsFactors = FALSE
+      )
+      
+      cat("Sample label positions:\n")
+      print(head(label_df, 3))
+      
+      # Add station points to map
       gg_map <- gg_map +
         geom_sf(data = current_detects_data, col = "black", shape = 24, 
-                fill = "yellow", size = 2, alpha = .5) +
-        geom_text(data = unique_stations, 
-                  aes(x = unique_coords[,1], y = unique_coords[,2] + 5000, 
-                      label = site_short), 
-                  color = "white", size = 3, vjust = 0, check_overlap = TRUE)
+                fill = "yellow", size = 2, alpha = 0.5)+
+        geom_sf_text(data = unique_stations, 
+                  aes(label = site_short), 
+                  color = "white", size = 3, vjust = 0, 
+                  check_overlap = FALSE)
+      
+      cat("Added", nrow(label_df), "text labels\n")
+      cat("=== Done ===\n\n")
     }
     
     # Complete the plot
@@ -243,13 +270,15 @@ plotKDEMaps <- function(shapefile_dir,
                crs = UTM20, expand = TRUE) +
       labs(title = map_title) +
       ylab("") + 
-      xlab("") +
-      theme(panel.grid.major = element_blank(), 
+      xlab("")+
+     
+       # Continue theme settings
+            theme(panel.grid.major = element_blank(), 
             panel.grid.minor = element_blank(), 
             legend.position = c(0.1, 0.9), 
             legend.background = element_rect(fill = NA), 
             legend.key = element_rect(fill = NA), 
-            plot.margin = margin(0, 0, 0, 0), 
+            plot.margin = margin(5, 5, 5, 5),  # Increased margins
             plot.title = element_text(hjust = 0.5), 
             plot.subtitle = element_text(hjust = 0.5), 
             axis.title = element_blank()) +
@@ -279,9 +308,13 @@ plotKDEMaps <- function(shapefile_dir,
 
 # Example usage:
 # Run for both PAM and sighting data from the same directory
+# Exclude the 50% quantile from plots
 plotKDEMaps(shapefile_dir = "output/shapes/", 
             land = landUTM, 
-            contour_data = cont_UTM, 
             baleen_stns = baleen_stns,  # Only used for PAM data
             sighting_data = WS_data_sf, # Sighting points for sighting KDE maps
-            output_dir = "output/FIGS/")
+            output_dir = "output/FIGS/",
+            exclude_quantiles = "50%")  # NEW: Exclude 50% quantile
+
+# If you want to exclude multiple quantiles, pass a vector:
+# exclude_quantiles = c("50%", "25%")
