@@ -19,14 +19,17 @@ baleen_stns = st_as_sf(read.csv(filepath), coords = c("longitude", "latitude"), 
 
  # plot(st_geometry(baleen_stns))
 
-# #beaked
-# beaked_stns = read_sf("input/DOY.shp",crs =4326 )%>%st_transform(crs = UTM20)%>%dplyr::group_by(site)%>%dplyr::summarise()
-# 
-# stations = rbind(baleen_stns, beaked_stns)
-# # plot(st_geometry(stations))
-# crs(stations)
+
 
 # bound boxes for plots / study areas -----
+
+filepath = "shapefiles/studyArea/ESS_study_area_simple.shp"
+
+ess_study_final = read_sf(filepath)%>%st_transform(4326)
+st_crs(ess_study_final)
+
+
+
 GEO_BOUND =  st_bbox( c(xmin = -75,ymin = 38, xmax = -40, ymax =60 ), crs = st_crs(4326))%>%
   st_as_sfc()%>% st_sf()
 
@@ -35,12 +38,13 @@ UTM_BOUND = st_bbox(GEO_BOUND)%>%st_as_sfc()%>% st_sf()%>%st_transform(UTM20)
 
 
 # bound box SS data -----
-Bound_boxB <- st_bbox( baleen_stns)
+Bound_boxB <- st_bbox( ess_study_final)
 Bound_boxB <- Bound_boxB %>%
   st_as_sfc()%>% #turns the bounding box into a sfc object, that just describes a specific geometry
   st_sf()
 Bound_boxBUTM <- Bound_boxB%>%st_transform(UTM20)
 
+plot(st_geometry(Bound_boxBUTM))
 
 ext(Bound_boxBUTM)
 
@@ -113,13 +117,13 @@ NBW_CH_UTM=NBW_CH%>%
   st_transform(UTM20)
 
 #read in Gully Zones, transform to UTM Zone 20 
-Gully_UTM <- read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/Gully/Gully_MPA.shp"))%>%st_transform(UTM20)
+Gully_UTM <- read_sf(here::here("~/CODE/shapefiles/ProtectedAreas/DFO/Gully/Gully/Gully_MPA.shp"))%>%st_transform(UTM20)
 GullyZ1= Gully_UTM%>%filter(NAME == "Zone 1")
 
 # Land ------
 #all countries
 
-land <- read_sf(here::here("~/CODE/shapefiles/coastline/worldcountries/ne_50m_admin_0_countries.shp"))%>%dplyr::filter(CONTINENT == "North America")
+land <- read_sf(here::here("~/CODE/shapefiles/coastline/worldcountries/ne_50m_admin_0_countries.shp"))%>%dplyr::filter(CONTINENT == "North America")%>%st_intersection(Bound_boxB)
 landUTM = land%>%st_transform(UTM20) %>%st_intersection(UTM_BOUND)
 
 #NAFO------------

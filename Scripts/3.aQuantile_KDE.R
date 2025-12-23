@@ -1,9 +1,35 @@
-# create shapefiles of kde density rasters by binning into quantiles similar to ArcGIS...
-#change input to change source maps
+# KDE Raster to Quantile Shapefile Converter
+# Updated 2025
+#
+# This script converts kernel density estimation (KDE) rasters into quantile-based
+# polygon shapefiles for use in GIS applications and mapping workflows.
+#
+# Purpose:
+# - Bins continuous KDE density values into quantile classes (50%, 80%, 90%, 95%)
+# - Converts raster pixels to vector polygons by quantile level
+# - Creates clean polygon boundaries by dissolving adjacent cells in same quantile
+# - Outputs shapefiles compatible with ArcGIS and other GIS software
+#
+# Process:
+# 1. Reads KDE raster files (.tif) from input directory
+# 2. Calculates quantile breaks using ArcGIS-compatible method (type 6)
+# 3. Bins raster values into quantile classes
+# 4. Converts binned raster to polygons with dissolve
+# 5. Adds quantile labels as attributes
+# 6. Saves as shapefile (.shp) with associated files
+#
+# Use cases:
+# - Simplifying continuous density surfaces for visualization
+# - Identifying core use areas (top quantiles) vs. peripheral areas
+# - Creating habitat suitability zones from KDE outputs
+# - Reducing file size and complexity for web mapping
+#
+# Inputs:  KDE rasters (.tif) from any source directory (configurable)
+# Outputs: Quantile polygon shapefiles (.shp) with attribute table
+#
+# Note: Change 'input' and 'output' variables to process different datasets
+#       Adjust 'probs' vector to modify quantile thresholds
 
-
-# create shapefiles of kde density rasters by binning into quantiles
-#change input to change source maps
 options(scipen = 999)
 pacman::p_load(sf,stars, dplyr, stringr, terra, classInt)
 input = "output/tif/"
@@ -21,7 +47,7 @@ processKDE <- function(tif_file, output_dir = output) {
   kde_raster[kde_raster <= 0] <- NA
   
   # Define quantile probabilities
-  probs <- c(.50,0.75, 0.85, 0.9, 0.95, 1)
+  probs <- c(.50,0.80, 0.9, 0.95, 1)
   
   # Calculate quantile breaks (excluding NA values)
   kde_values <- values(kde_raster, mat = FALSE)

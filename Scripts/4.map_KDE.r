@@ -14,9 +14,11 @@ species_names_pam <- c(
   Eg = "Right Whale"
 )
 
+sights = "WSDB_DFO_Sep2025.csv"
+
 # Create point shapefile from records
 # INPUTS NEED TO BE CSV files, file names are specified in quotations here:-----
-input_file <-"WSDB_DFO_Sep2025.csv"
+input_file <- sights
 species = "speciesCodes.csv" 
 
 whale_data =  read_csv(here("input/2025/sights/", input_file), col_types = cols(.default ="c"))
@@ -25,7 +27,6 @@ whale_data =  read_csv(here("input/2025/sights/", input_file), col_types = cols(
 SP_data <- read_csv(here("input", species), col_types = cols(.default ="c"))
 WS_data = left_join(whale_data, SP_data)
 # bound boxes for study area -----
-bbox = Bound_boxB
 
 WS_data_sf = st_as_sf(WS_data, coords= c("LONGITUDE","LATITUDE"), crs = sf::st_crs(4326) )%>%
   st_intersection(bbox)%>%st_transform(UTM20)
@@ -157,6 +158,7 @@ plotKDEMaps <- function(shapefile_dir,
       next
     }
     
+    
     # Convert Quantile to ordered factor
     kde_sf_data$Quantil <- factor(kde_sf_data$Quantil, 
                                   levels = unique_quantiles, 
@@ -164,7 +166,7 @@ plotKDEMaps <- function(shapefile_dir,
     
     # Define palette - match the number of colors to number of quantiles
     n_quantiles <- length(unique_quantiles)
-    pal <- rev(get(predpal)(n_quantiles))
+    pal <- rev(get(predpal)(n_quantiles+1))
     
     # Start building the plot
     gg_map <- ggplot() +
@@ -196,14 +198,14 @@ plotKDEMaps <- function(shapefile_dir,
       
       cat("Number of matching sightings found:", nrow(species_sightings), "\n")
       
-      if (nrow(species_sightings) > 0) {
-        gg_map <- gg_map +
-          geom_sf(data = species_sightings, col = "white", shape = 21, 
-                  fill = "yellow", size = 1.5, alpha = 0.6, stroke = 0.5)
-        cat("Added", nrow(species_sightings), "sighting points to map\n")
-      } else {
-        cat("WARNING: No matching sightings found for", species_name, "\n")
-      }
+      # if (nrow(species_sightings) > 0) {
+      #   gg_map <- gg_map +
+      #     geom_sf(data = species_sightings, col = "white", shape = 21, 
+      #             fill = "yellow", size = 1.5, alpha = 0.6, stroke = 0.5)
+      #   cat("Added", nrow(species_sightings), "sighting points to map\n")
+      # } else {
+      #   cat("WARNING: No matching sightings found for", species_name, "\n")
+      # }
     }
     
     # Add station points and labels ONLY for PAM data
@@ -309,6 +311,15 @@ plotKDEMaps <- function(shapefile_dir,
 # Example usage:
 # Run for both PAM and sighting data from the same directory
 # Exclude the 50% quantile from plots
+
+#proj
+UTM20 <- terra::crs("+init=epsg:32620") # CODE FOR UTM Zone 20
+
+#load land as UTM
+landUTM <- read_sf(here::here("~/CODE/shapefiles/coastline/worldcountries/ne_50m_admin_0_countries.shp"))%>%
+  dplyr::filter(CONTINENT == "North America")%>%st_transform(UTM20)
+
+
 plotKDEMaps(shapefile_dir = "output/shapes/", 
             land = landUTM, 
             baleen_stns = baleen_stns,  # Only used for PAM data

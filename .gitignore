@@ -1,4 +1,5 @@
 # History files
+*.pptx
 .Rhistory
 .Rapp.history
 # Session Data files
@@ -37,3 +38,4 @@ rsconnect/
 input/**
 output/**
 ~/.boxr-oauth
+shapefiles**
