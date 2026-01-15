@@ -39,3 +39,7 @@ input/**
 output/**
 ~/.boxr-oauth
 shapefiles**
+*tif
+*shp
+*shx
+shape*

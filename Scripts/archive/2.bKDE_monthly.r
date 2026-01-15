@@ -1,5 +1,6 @@
 # Complete Monthly KDE analysis 
 # This version creates cleaner, more comparable monthly maps
+# Updated to clip data to study area
 
 options(scipen = 999)
 
@@ -220,13 +221,49 @@ performMonthlyKDE <- function(data_sf,
 
 
 #.............................
-# CREATE COMMON WINDOW FROM PAM STATIONS-------
+# LOAD STUDY AREA AND CREATE COMMON WINDOW-------
 #.............................
 
-cat("\n=== CREATING COMMON WINDOW FROM PAM STATIONS ===\n\n")
+cat("\n=== LOADING STUDY AREA AND CREATING COMMON WINDOW ===\n\n")
+
+# Load study area shapefile
+study_area_path <- "shapefiles/studyArea/ESS_study_area_simple.shp"
+study_area <- st_read(study_area_path, quiet = TRUE)
+
+cat("Study area CRS:", st_crs(study_area)$input, "\n")
+
+# Transform to UTM20 if needed
+if(st_crs(study_area)$epsg != 32620) {
+  study_area <- st_transform(study_area, UTM20)
+}
+
+# Create window from study area extents
+study_bbox <- st_bbox(study_area)
+
+buffer_percent <- 0.05  # Small buffer for edge cases
+x_range <- c(study_bbox["xmin"], study_bbox["xmax"])
+y_range <- c(study_bbox["ymin"], study_bbox["ymax"])
+
+x_buffer <- (x_range[2] - x_range[1]) * buffer_percent
+y_buffer <- (y_range[2] - y_range[1]) * buffer_percent
+
+expanded_x_range <- c(x_range[1] - x_buffer, x_range[2] + x_buffer)
+expanded_y_range <- c(y_range[1] - y_buffer, y_range[2] + y_buffer)
+
+common_window <- owin(xrange = expanded_x_range, yrange = expanded_y_range)
+
+cat("Common window created from study area\n")
+cat("X range:", expanded_x_range, "\n")
+cat("Y range:", expanded_y_range, "\n\n")
+
+#.............................
+# PROCESS MONTHLY PAM DATA---------
+#.............................
+
+cat("\n=== PROCESSING MONTHLY PAM DATA ===\n\n")
 
 # Read baleen whale PAM data
-filepath = "input/2025/baleen_presence_laura_2025.csv"
+filepath <- "input/2025/baleen_presence_laura_2025.csv"
 baleen_PA_raw <- read.csv(filepath)
 
 # Transform data: calculate detection rate per station-month-species
@@ -243,36 +280,38 @@ baleen_PA <- baleen_PA_raw %>%
   ) %>%
   filter(total_days > 0)
 
-cat("Data summary:\n")
+cat("Data summary (before clipping):\n")
 cat("  Stations:", length(unique(baleen_PA$site)), "\n")
 cat("  Species:", paste(unique(baleen_PA$species), collapse = ", "), "\n")
-cat("  Date range:", min(baleen_PA_raw$rec_date), "to", max(baleen_PA_raw$rec_date), "\n")
+cat("  Station-month records:", nrow(baleen_PA), "\n\n")
 
-baleen_sf <- baleen_PA %>%
+# Create spatial object
+baleen_sf_full <- baleen_PA %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
   st_transform(crs = UTM20)
 
-# Create window from PAM station extents
-pam_coords <- st_coordinates(baleen_sf)
-x_range <- range(pam_coords[, "X"])
-y_range <- range(pam_coords[, "Y"])
+# Clip PAM data to study area
+cat("Clipping PAM data to study area...\n")
+baleen_sf <- st_intersection(baleen_sf_full, study_area)
 
-buffer_percent <- 0.2
-x_buffer <- (x_range[2] - x_range[1]) * buffer_percent
-y_buffer <- (y_range[2] - y_range[1]) * buffer_percent
+cat("  Before clipping:", nrow(baleen_sf_full), "station-month records\n")
+cat("  After clipping:", nrow(baleen_sf), "station-month records\n")
+cat("  Removed:", nrow(baleen_sf_full) - nrow(baleen_sf), "records outside study area\n\n")
 
-expanded_x_range <- c(x_range[1] - x_buffer, x_range[2] + x_buffer)
-expanded_y_range <- c(y_range[1] - y_buffer, y_range[2] + y_buffer)
+# Summary by species after clipping
+species_summary <- baleen_sf %>%
+  st_drop_geometry() %>%
+  group_by(species) %>%
+  summarise(
+    n_records = n(),
+    n_months = n_distinct(month),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_records))
 
-common_window <- owin(xrange = expanded_x_range, yrange = expanded_y_range)
-
-cat("Common window created from PAM station extents\n")
-
-#.............................
-# PROCESS MONTHLY PAM DATA---------
-#.............................
-
-cat("\n=== PROCESSING MONTHLY PAM DATA ===\n\n")
+cat("Records by species (after clipping):\n")
+print(species_summary)
+cat("\n")
 
 species_list_pam <- c("Bb", "Bm", "Bp", "Mn", "Eg", "Ba")
 
@@ -298,7 +337,7 @@ performMonthlyKDE(
   species_names = species_names,
   weight_col = "proportion_det",
   window = common_window,
-  output_prefix = "pam",
+  output_prefix = "pam_clipped",
   sigma_val = 10000
 )
 

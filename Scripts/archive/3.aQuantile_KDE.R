@@ -5,7 +5,7 @@
 # polygon shapefiles for use in GIS applications and mapping workflows.
 #
 # Purpose:
-# - Bins continuous KDE density values into quantile classes (50%, 80%, 90%, 95%)
+# - Bins continuous KDE density values into quantile classes (50%, 85%, 90%, 95%)
 # - Converts raster pixels to vector polygons by quantile level
 # - Creates clean polygon boundaries by dissolving adjacent cells in same quantile
 # - Outputs shapefiles compatible with ArcGIS and other GIS software
@@ -32,8 +32,8 @@
 
 options(scipen = 999)
 pacman::p_load(sf,stars, dplyr, stringr, terra, classInt)
-input = "output/tif/"
-output = "output/shapes/"
+input = "output/tif/monthly/"
+output = "output/shapes/monthly/"
 # Create shapefiles of Quantile bins for RASTER KDE --------
 processKDE <- function(tif_file, output_dir = output) {
   
@@ -47,7 +47,7 @@ processKDE <- function(tif_file, output_dir = output) {
   kde_raster[kde_raster <= 0] <- NA
   
   # Define quantile probabilities
-  probs <- c(.50,0.80, 0.9, 0.95, 1)
+  probs <- c(.50,0.85, 0.9, 0.95, 1)
   
   # Calculate quantile breaks (excluding NA values)
   kde_values <- values(kde_raster, mat = FALSE)
