@@ -3,7 +3,7 @@
 # Author: Laura Joan Feyrer
 # Email:  ljfeyrer@dal.ca
 # Date Created: 2026-01-12
-# Most Recent Date Updated: 2026-01-13
+# Most Recent Date Updated: 2026-01-15
 #
 # Script Name: KDES_CE_Collab.R
 #
@@ -996,7 +996,7 @@ collab_CE/
 ### Sightings Data
 - **Bandwidth**: 10,000 m (10 km)
 - **Kernel**: Gaussian
-- **Resolution**: ~100-150 m
+- **Resolution**: ~500 m
 - **Weighting**: Proximity-weighted for individual species (isolated observations downweighted)
 - **Normalization**: Normalized to [0, 1] by species maximum
 - **CRS**: EPSG:32620 (WGS84 UTM Zone 20N)
@@ -1004,7 +1004,7 @@ collab_CE/
 ### PAM Data
 - **Bandwidth**: 10,000 m (10 km)
 - **Kernel**: Gaussian
-- **Resolution**: ~100-150 m
+- **Resolution**: ~500 m
 - **Weighting**: Detection rate (proportion of days with detections)
 - **Normalization**: Normalized to [0, 1] by species maximum
 - **CRS**: EPSG:32620 (WGS84 UTM Zone 20N)
@@ -1035,7 +1035,7 @@ The file `kde_index.csv` contains complete metadata for all KDE outputs includin
 ## Quality Check Maps
 
 The `KDE_maps/` directory contains PNG visualizations of KDE surfaces with:
-- Log-transformed density values for improved visibility
+- Sqrt-transformed density values for improved visibility
 - Coastline overlay
 - Offshore Wind Area (OWA) boundaries
 - PAM station locations (for PAM analyses)
@@ -1044,7 +1044,7 @@ The `KDE_maps/` directory contains PNG visualizations of KDE surfaces with:
 ## Data Sources
 
 - **Sightings**: Combined deduplicated dataset from WSDB and aerial surveys (2015-present)
-- **PAM**: Autonomous acoustic recorder deployments (baleen whale presence)
+- **PAM**: Autonomous acoustic recorder deployments (baleen/ beaked whale presence)
 
 ## Contact
 

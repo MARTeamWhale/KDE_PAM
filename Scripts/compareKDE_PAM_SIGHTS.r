@@ -8,7 +8,6 @@
 # - Fixed beaked whale PAM matching (was matching too many files)
 # - Ha = Northern Bottlenose Whale, Mb = Sowerby's Beaked Whale
 # - Zc = Goose Beaked Whale (NOT Cuvier's), MmMe = True's/Gervais' Beaked Whale
-# - Cuvier's is searched for in sightings but NOT displayed in outputs
 # - More explicit PAM base names to avoid false matches
 # ==============================================================================
 
@@ -17,7 +16,7 @@ options(scipen = 999)
 pacman::p_load(sf, tidyverse, terra, ggplot2, viridis, ggspatial, patchwork, rlang)
 
 # ==============================================================================
-# CONFIGURATION
+# CONFIGURATION--------
 # ==============================================================================
 
 CREATE_SIGHTINGS_ONLY_MAPS <- TRUE
@@ -26,7 +25,7 @@ CREATE_SIGHTINGS_ONLY_MAPS <- TRUE
 UTM20 <- st_crs(32620)
 
 # Input paths
-SHAPEFILE_DIR <- "output/shapes/"
+SHAPEFILE_DIR <- "output/shapes/baseline_match_v3/multi"
 SIGHTINGS_DATA <- "input/2025/combined_sights/combined_dedup_1km_day_clipped_classified.csv"
 BALEEN_PAM_DATA <- "input/2025/baleen_presence_laura_2025.csv"
 BEAKED_PAM_DATA <- "input/2025/beaked_PAM/beaked_pam_results_2026-01-12.csv"
@@ -40,7 +39,7 @@ if (!dir.exists(COMPARE_OUTPUT_DIR)) dir.create(COMPARE_OUTPUT_DIR, recursive = 
 
 # Color palettes
 QUANTILE_PALETTE <- "mako"
-POINT_COLOR <- "gray"
+POINT_COLOR <- "gray40"
 STATION_COLOR <- "orange"
 OSW_COLOR <- "red"
 OSW_ALPHA <- 0.3
@@ -55,42 +54,42 @@ BALEEN_SPECIES_MAPPING <- list(
     common_name = "WHALE-SEI",
     display_name = "Sei Whale",
     sightings_base = "WHALE-SEI",
-    pam_base = "pam_Bb"  # Matches "KDE_pam_Bb_..."
+    pam_base = "pam_baleen_Sei_Whale_Bb"  # Matches "KDE_pam_Bb_..."
   ),
   "Blue_Whale" = list(
     pam_code = "Bm",
     common_name = "WHALE-BLUE",
     display_name = "Blue Whale",
     sightings_base = "WHALE-BLUE",
-    pam_base = "pam_Bm"
+    pam_base = "pam_baleen_Blue_Whale_Bm"
   ),
   "Fin_Whale" = list(
     pam_code = "Bp",
     common_name = "WHALE-FIN",
     display_name = "Fin Whale",
     sightings_base = "WHALE-FIN",
-    pam_base = "pam_Bp"
+    pam_base = "pam_baleen_Fin_Whale_Bp"
   ),
   "Humpback_Whale" = list(
     pam_code = "Mn",
     common_name = "WHALE-HUMPBACK",
     display_name = "Humpback Whale",
     sightings_base = "WHALE-HUMPBACK",
-    pam_base = "pam_Mn"
+    pam_base = "pam_baleen_Humpback_Whale_Mn"
   ),
   "Minke_Whale" = list(
     pam_code = "Ba",
     common_name = "WHALE-MINKE",
     display_name = "Minke Whale",
     sightings_base = "WHALE-MINKE",
-    pam_base = "pam_Ba"
+    pam_base = "pam_baleen_Minke_Whale_Ba"
   ),
   "North_Atlantic_Right_Whale" = list(
     pam_code = "Eg",
     common_name = "WHALE-NORTH ATLANTIC RIGHT",
     display_name = "North Atlantic Right Whale",
     sightings_base = "WHALE-NORTH_ATLANTIC_RIGHT",
-    pam_base = "pam_Eg"
+    pam_base = "pam_baleen_North_Atlantic_Right_Whale_Eg"
   )
 )
 
@@ -104,7 +103,7 @@ BEAKED_SPECIES_MAPPING <- list(
     common_name = "WHALE-NORTHERN BOTTLENOSE",
     display_name = "Northern Bottlenose Whale",
     sightings_base = "WHALE-NORTHERN_BOTTLENOSE",
-    pam_base = "beaked_pam_Ha",  # Very specific to avoid false matches
+    pam_base = "pam_beaked_Northern_Bottlenose_Whale_Ha",  # Very specific to avoid false matches
     has_sightings = TRUE
   ),
   "Sowerbys_Beaked_Whale" = list(
@@ -112,7 +111,7 @@ BEAKED_SPECIES_MAPPING <- list(
     common_name = "WHALE-SOWERBY'S BEAKED",
     display_name = "Sowerby's Beaked Whale",
     sightings_base = "WHALE-SOWERBY'S_BEAKED",
-    pam_base = "beaked_pam_Mb",
+    pam_base = "pam_beaked_Sowerbys_Beaked_Whale_Mb",
     has_sightings = TRUE
   ),
   "Goose_Beaked_Whale" = list(
@@ -120,7 +119,7 @@ BEAKED_SPECIES_MAPPING <- list(
     common_name = "WHALE-GOOSE BEAKED",  # NOT Cuvier's
     display_name = "Goose Beaked Whale",
     sightings_base = "WHALE-GOOSE_BEAKED",
-    pam_base = "beaked_pam_Zc",
+    pam_base = "pam_beaked_Goose_Beaked_Whale_Zc",
     has_sightings = FALSE,
     alternate_sightings_names = c("WHALE- CUVIER'S BEAKED", "WHALE-CUVIER'S BEAKED")  # Search but don't display
   ),
@@ -129,7 +128,7 @@ BEAKED_SPECIES_MAPPING <- list(
     common_name = "WHALE-TRUE'S/GERVAIS' BEAKED",
     display_name = "True's/Gervais' Beaked Whale",
     sightings_base = "WHALE-TRUE'S_BEAKED",
-    pam_base = "beaked_pam_MmMe",
+    pam_base = "pam_beaked_Trues_Gervais_Beaked_Whale_MmMe",
     has_sightings = FALSE
   )
 )
@@ -142,8 +141,8 @@ GROUPED_BALEEN <- list(
   "All_Baleen_Whales" = list(
     common_name = "ALL_BALEEN_MYSTICETES",
     display_name = "All Baleen Whales",
-    sightings_base = "combined_mysticetes",
-    pam_base = "grouped_baleen_pam",
+    sightings_base = "KDE_sightings_mysticetes",
+    pam_base = "grouped_baleen_pam_All_Baleen_Whales_(PAM)",
     is_grouped = TRUE
   )
 )
@@ -153,11 +152,23 @@ GROUPED_BEAKED <- list(
     common_name = "ALL_BEAKED_WHALES",
     display_name = "All Beaked Whales",
     sightings_base = NA_character_,
-    pam_base = "grouped_beaked_pam",
+    pam_base = "grouped_beaked_pam_All_Beaked_Whales_(PAM)",
     is_grouped = TRUE,
     pam_only = TRUE
   )
 )
+
+GROUPED_ODONTOCETES_SIGHTINGS <- list(
+  "All_Odontocetes" = list(
+    common_name = "ODONTOCETES",
+    display_name = "All Odontocetes (Toothed Whales)",
+    sightings_base = "sightings_odontocetes",
+    pam_base = NA_character_,
+    is_grouped = TRUE,
+    pam_only = FALSE
+  )
+)
+
 
 # ==============================================================================
 # LOAD BASE LAYERS
@@ -254,7 +265,7 @@ cat("\n")
 pam_data <- baleen_pam_data  # Keep for backward compatibility
 
 # ==============================================================================
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS-------
 # ==============================================================================
 
 extract_kde_params <- function(filename) {
@@ -286,17 +297,20 @@ extract_kde_params <- function(filename) {
 }
 
 find_kde_shapefiles <- function(base_name,
-                                shapefile_dir = SHAPEFILE_DIR,
-                                prefer_proximity = FALSE) {
+                                 shapefile_dir = SHAPEFILE_DIR,
+                                 prefer_proximity = FALSE) {
   
   files <- list.files(shapefile_dir, pattern = "\\.shp$", full.names = TRUE, ignore.case = TRUE)
   
-  # Use word boundary to avoid false matches
-  # e.g., "beaked_pam_Ha" won't match "HUMPBACK" or "HARBOUR"
-  pattern <- paste0("\\b", base_name, "\\b")
+  # Escape regex special characters so base_name is treated literally
+  base_esc <- gsub("([][{}()+*^$|\\\\.?])", "\\\\\\1", base_name)
+  
+  # Match base_name as an underscore-delimited token (or start/end of string)
+  token_pat <- paste0("(^|_)", base_esc, "(_|$)")
+  
   hits <- files[
     grepl("^KDE_", basename(files), ignore.case = TRUE) &
-      grepl(pattern, basename(files), ignore.case = TRUE)
+      grepl(token_pat, basename(files), ignore.case = TRUE)
   ]
   
   if (length(hits) == 0) return(NULL)
@@ -327,6 +341,7 @@ find_kde_shapefiles <- function(base_name,
   df
 }
 
+
 load_kde_shapefile <- function(pattern_or_file, shapefile_dir = SHAPEFILE_DIR) {
   
   if (file.exists(pattern_or_file) && grepl("\\.shp$", pattern_or_file)) {
@@ -354,7 +369,7 @@ load_kde_shapefile <- function(pattern_or_file, shapefile_dir = SHAPEFILE_DIR) {
     st_transform(UTM20)
   
   quantile_col <- NULL
-  possible_names <- c("Quantile", "Quantil", "quant_level", "quantile", "QUANTILE")
+  possible_names <- c("Quantile", "Quantil", "quant_level", "quantil", "QUANTILE")
   
   for (col_name in possible_names) {
     if (col_name %in% names(kde_shp)) {
@@ -391,7 +406,7 @@ load_kde_shapefile <- function(pattern_or_file, shapefile_dir = SHAPEFILE_DIR) {
 }
 
 # ==============================================================================
-# FUNCTION: CREATE COMPARISON MAP
+# FUNCTION: CREATE COMPARISON MAP------
 # ==============================================================================
 create_comparison_map <- function(species_key, species_info, 
                                   sightings_data, pam_data,
@@ -460,9 +475,11 @@ create_comparison_map <- function(species_key, species_info,
     cat("  PAM-only species - no sightings data\n")
     species_sightings <- data.frame()
     
-    # Get PAM code from species_info
-    if (!is.null(species_info$pam_code)) {
-      species_pam <- pam_data %>% filter(species == species_info$pam_code)
+    if (isTRUE(is_grouped) || isTRUE(species_info$is_grouped)) {
+      # Grouped PAM-only: keep all PAM stations passed into the function
+      species_pam <- pam_data
+    } else if (!is.null(species_info$pam_code)) {
+      species_pam <- pam_data %>% dplyr::filter(species == species_info$pam_code)
     } else {
       species_pam <- data.frame()
     }
@@ -608,8 +625,10 @@ create_comparison_map <- function(species_key, species_info,
       param_text <- paste(bw_text, "|", method_text, "|", weight_text)
       
       p_sightings <- ggplot() +
-        geom_sf(data = species_sightings, color = POINT_COLOR, size = 1, alpha = 0.6) +
-        geom_sf(data = sightings_kde, aes(fill = Quantile), color = NA, alpha = 0.6) +
+        geom_sf(data = species_sightings, color = "grey40", fill = NULL, size = 1, shape = 21, alpha = 0.6) +
+        
+        geom_sf(data = sightings_kde, aes(fill = Quantile), color = NA, alpha = .6) +
+        
         geom_sf(data = land, fill = "grey60", color = NA) +
         geom_sf(data = osw_wind, fill = NA, color = OSW_COLOR, alpha = OSW_ALPHA, linewidth = 1) +
         geom_sf(data = study_area, fill = NA, color = "black", linewidth = 0.8, linetype = "dashed") +
@@ -762,15 +781,16 @@ create_comparison_map <- function(species_key, species_info,
 # HELPER FUNCTION: DISCOVER SIGHTINGS-ONLY SPECIES
 # ==============================================================================
 
-discover_sightings_only_species <- function(shapefile_dir = SHAPEFILE_DIR, 
-                                            exclude_species = c()) {
+discover_sightings_only_species <- function(shapefile_dir = SHAPEFILE_DIR,
+                                            exclude_species = character()) {
   
   cat("Discovering sightings-only species from KDE files...\n")
   
-  all_kde_files <- list.files(shapefile_dir, pattern = "^KDE_.*\\.shp$", 
+  all_kde_files <- list.files(shapefile_dir, pattern = "^KDE_.*\\.shp$",
                               full.names = FALSE, ignore.case = TRUE)
   
-  sightings_kdes <- all_kde_files[grepl("combined_species|combined_odontocetes", all_kde_files, ignore.case = TRUE)]
+  # NEW: match your current naming scheme
+  sightings_kdes <- all_kde_files[grepl("^KDE_sightings_species_proximity_", all_kde_files, ignore.case = TRUE)]
   
   if (length(sightings_kdes) == 0) {
     cat("  No sightings KDE files found\n")
@@ -780,72 +800,45 @@ discover_sightings_only_species <- function(shapefile_dir = SHAPEFILE_DIR,
   species_list <- list()
   
   for (file in sightings_kdes) {
-    if (grepl("combined_odontocetes", file, ignore.case = TRUE)) {
-      species_base <- "combined_odontocetes"
-      
-      species_key <- species_base
-      
-      if (!species_key %in% names(species_list)) {
-        species_list[[species_key]] <- list(
-          common_name = species_base,
-          display_name = "All Odontocetes (Toothed Whales)",
-          sightings_base = "combined_odontocetes",
-          pam_base = NA_character_,
-          is_sightings_only = TRUE,
-          is_grouped = TRUE
-        )
-        
-        cat("  Found: All Odontocetes (Toothed Whales)\n")
-      }
-      next
-    }
     
-    temp <- sub("^KDE_combined_species_", "", file, ignore.case = TRUE)
-    temp <- sub("^proximity_", "", temp, ignore.case = TRUE)
+    temp <- sub("^KDE_sightings_species_proximity_", "", file, ignore.case = TRUE)
+    temp <- sub("\\.shp$", "", temp, ignore.case = TRUE)
     
-    pattern <- "^([A-Z0-9_'-]+?)(?:_bw|_diggle|_adaptive|_fixed|__|\\.).*$"
-    match <- regmatches(temp, regexec(pattern, temp, ignore.case = TRUE))
+    # Strip method / bandwidth suffixes and anything after
+    temp <- sub("_(fixed|adaptive|diggle).*", "", temp, ignore.case = TRUE)
+    temp <- sub("_bw\\d+.*", "", temp, ignore.case = TRUE)
     
-    if (length(match[[1]]) > 1) {
-      species_base <- match[[1]][2]
-      species_base <- sub("_+$", "", species_base)
+    species_base <- temp
+    species_base <- sub("_+$", "", species_base)
+    
+    if (species_base %in% exclude_species) next
+    
+    if (!species_base %in% names(species_list)) {
+      display_name <- species_base
+      display_name <- gsub("^WHALE-", "", display_name)
+      display_name <- gsub("^DOLPHINS-", "", display_name)
+      display_name <- gsub("^PORPOISE-", "", display_name)
+      display_name <- gsub("_", " ", display_name)
+      display_name <- gsub("-", " ", display_name)
+      display_name <- tools::toTitleCase(tolower(display_name))
       
-      if (grepl("mysticete", species_base, ignore.case = TRUE)) {
-        next
-      }
+      species_list[[species_base]] <- list(
+        common_name = species_base,
+        display_name = display_name,
+        sightings_base = species_base,
+        pam_base = NA_character_,
+        is_sightings_only = TRUE,
+        is_grouped = FALSE
+      )
       
-      if (species_base %in% exclude_species) {
-        next
-      }
-      
-      species_key <- species_base
-      
-      if (!species_key %in% names(species_list)) {
-        display_name <- gsub("WHALE-", "", species_base)
-        display_name <- gsub("DOLPHINS-", "Dolphins - ", display_name)
-        display_name <- gsub("PORPOISE-", "Porpoise - ", display_name)
-        display_name <- gsub("_", " ", display_name)
-        display_name <- gsub("-", " ", display_name)
-        display_name <- tools::toTitleCase(tolower(display_name))
-        
-        species_list[[species_key]] <- list(
-          common_name = species_base,
-          display_name = display_name,
-          sightings_base = species_base,
-          pam_base = NA_character_,
-          is_sightings_only = TRUE,
-          is_grouped = FALSE
-        )
-        
-        cat("  Found:", display_name, "\n")
-      }
+      cat("  Found:", display_name, "\n")
     }
   }
   
   cat("  Total sightings-only species found:", length(species_list), "\n\n")
-  
-  return(species_list)
+  species_list
 }
+
 
 # ==============================================================================
 # RUN COMPARISONS
@@ -914,6 +907,16 @@ if (CREATE_SIGHTINGS_ONLY_MAPS) {
     }
   }
 }
+
+cat("=== CREATING GROUPED ODONTOCETES SIGHTINGS MAP ===\n\n")
+for (species_key in names(GROUPED_ODONTOCETES_SIGHTINGS)) {
+  species_info <- GROUPED_ODONTOCETES_SIGHTINGS[[species_key]]
+  create_comparison_map(species_key, species_info,
+                        sightings_data, pam_data,
+                        is_grouped = TRUE,
+                        pam_only = FALSE)
+}
+
 
 # Grouped baleen
 cat("=== CREATING GROUPED ALL BALEEN WHALES COMPARISON ===\n\n")

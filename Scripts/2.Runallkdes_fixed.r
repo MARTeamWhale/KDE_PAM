@@ -1,88 +1,71 @@
 # HEADER --------------------------------------------
 #
-# Author: Laura Joan Feyrer 2026
+# Author: Laura Joan Feyrer
 # Email:  ljfeyrer@dal.ca
-# Most Recent Date Updated: 2026-01-14
+# Most Recent Date Updated: 2026-01-15
 #
-# Script Name: run_all_kdes_optimized.R
+# Script Name: run_all_kdes_optimized_SIMPLIFIED_v3.R
 #
 # Description:
-## OPTIMIZED unified script for KDE analysis of whale sightings and PAM data
-# Version 2026-01-14:
-# - Added CACHING system to avoid reprocessing unchanged data
-# - Added FAST_MODE for quick visualization tweaks without recalculating KDEs
-# - Optimized spatial operations and memory usage
-# - Added progress tracking
-# - Parallelized shapefile generation (optional)
-# - Reduced redundant file I/O operations
-# - Optimized quantile contour generation
+## SIMPLIFIED version matching KDES_CE_Collab.R exactly
+## Fixed coastline extent to match CE_Collab plotting
 #
-# Performance improvements:
-# 1. Data is cached after first load - subsequent runs are much faster
-# 2. KDE rasters are cached - can tweak plots without recalculating
-# 3. FAST_MODE allows visualization changes without full reprocessing
-# 4. Parallel processing for shapefile generation (when enabled)
-# 5. Smart cleanup - only removes what's needed
+# Changes from previous version:
+# - Fixed coastline cropping to study_area (using st_crop)
+# - Fixed plot extent to use study_area bbox (not auto)
+# - Matches CE_Collab's coastline handling exactly
 #
 
 # SET OPTIONS ---------------------------------------
 cat("SETTING OPTIONS... \n\n", sep = "")
 options(scipen = 999)
 options(encoding = "UTF-8")
-resolution = 500
+
+# RESOLUTION - MUST MATCH CE_COLLAB EXACTLY
+RESOLUTION <- 500  # 500m cells
 
 # ...............
-# PERFORMANCE SETTINGS - CONFIGURE HERE------
+# PERFORMANCE SETTINGS------
 # ...............
 
-ENABLE_CACHING <- TRUE         # Cache loaded data and KDE results for faster reruns
-FAST_MODE <- FALSE             # Skip KDE calculation, only regenerate plots from existing rasters
-USE_PARALLEL <- T          # Use parallel processing for shapefile generation (requires 'parallel' package)
-CLEAR_CACHE <- F           # Force reload all data (set TRUE to clear cache)
-CACHE_DIR <- "cache/"          # Directory for cached data
+ENABLE_CACHING <- TRUE
+FAST_MODE <- FALSE
+USE_PARALLEL <- T
+CLEAR_CACHE <- F
+CACHE_DIR <- "cache/"
 
 # OUTPUT ORGANIZATION
-USE_PARAMETER_FOLDERS <- TRUE  # Create subfolders for different parameter combinations
-PARAMETER_LABEL <- ""          # Optional custom label (e.g., "test1", "final"), leave empty for auto-naming
+USE_PARAMETER_FOLDERS <- F
+PARAMETER_LABEL <- ""
 
 # ...............
-# DATASET AND PARAMETER SELECTION - CONFIGURE HERE------
+# DATASET AND PARAMETER SELECTION------
 # ...............
 
-RUN_SIGHTINGS <- F
+RUN_SIGHTINGS <- T
 RUN_PAM <- T
 
 # ANALYSIS TYPE OPTIONS
-RUN_INDIVIDUAL_SPECIES <- F #sights
-RUN_FAMILY_GROUPS <- F #sights
-RUN_INDIVIDUAL_PAM <- T #baleen
-RUN_GROUPED_PAM <- F #baleen
-RUN_BEAKED_PAM <- T
-RUN_GROUPED_BEAKED_PAM <- F
+RUN_INDIVIDUAL_SPECIES <- T
+RUN_FAMILY_GROUPS <- T
+RUN_INDIVIDUAL_PAM <- T
+RUN_GROUPED_PAM <- T
+RUN_BEAKED_PAM <- TRUE
+RUN_GROUPED_BEAKED_PAM <- T
 
 # BANDWIDTH OPTIONS
-USE_BW_DIGGLE_INDIVIDUAL <- F
-USE_BW_DIGGLE_FAMILY <- F
+USE_BW_DIGGLE_INDIVIDUAL <- FALSE
+USE_BW_DIGGLE_FAMILY <- FALSE
 
 # PROXIMITY WEIGHTING OPTIONS
-USE_PROXIMITY_WEIGHTING_INDIVIDUAL <- T
-USE_PROXIMITY_WEIGHTING_FAMILY <- F
+USE_PROXIMITY_WEIGHTING_INDIVIDUAL <- TRUE
+USE_PROXIMITY_WEIGHTING_FAMILY <- FALSE
 
 # BANDWIDTH CONFIGURATION
 DEFAULT_SIGHTINGS_SIGMA <- 10000
-DEFAULT_PAM_SIGMA <- 5000
+DEFAULT_PAM_SIGMA <- 10000
 
-# SPECIES-SPECIFIC BANDWIDTH (overrides defaults)
-# For sparse data, larger bandwidth = smoother, less tight contours
-# NOTE: 10k default (DEFAULT_PAM_SIGMA) works well for most beaked whales
-SPECIES_BANDWIDTH <- list(
-  "Ha" = 10000,   # 15km for Northern Bottlenose
-  "Mb" = 10000,   # 15km for Sowerby's
-  "Zc" = 10000,   # 15km for Goose Beaked
-  "MmMe" = 10000, # 15km for True's/Gervais'
-  "All Beaked Whales (PAM)" = 10000,
-  "Eg" = 10000    # 12km for NARW
-)
+SPECIES_BANDWIDTH <- list()
 
 # PROXIMITY WEIGHTING CONFIGURATION
 PROXIMITY_K_NEIGHBORS <- 8
@@ -90,45 +73,12 @@ PROXIMITY_MAX_DISTANCE <- 5000
 PROXIMITY_MIN_WEIGHT <- 0.05
 
 # VISUALIZATION CONFIGURATION
-CONTOUR_QUANTILE <- 0.85  # Which contour to display on plots (0.85, 0.90, or 0.95)
-CONTOUR_MIN_AREA_KM2 <- 5  # Minimum area (km²) for contour polygons - removes small noise patches
-CONTOUR_SIMPLIFY_TOLERANCE <- 100  # Simplification tolerance in meters (0 = no simplification)
-CONTOUR_BUFFER_SMOOTH <- 0  # Buffer distance in meters for morphological smoothing (0 = disabled)
-# Try 500-1000m to remove cross-pattern artifacts from sparse data
-CONTOUR_MIN_DENSITY_THRESHOLD <- 0  # Minimum normalized density value (0-1) - values below this become NA
-# Try 0.01-0.05 for sparse data to remove weak/spurious densities
-
-# SPECIES-SPECIFIC CONTOUR SETTINGS (overrides defaults above)
-# Format: list with species names as keys, values are named lists with parameters
-# Only min_area, buffer_smooth, and min_density are used - quantile is controlled globally
-min_density = 0.0001
-
-SPECIES_CONTOUR_SETTINGS <- list(
-  # Sparse PAM data - needs aggressive cleaning:
-  "Eg" = list(min_area = 25, buffer_smooth = 1500, min_density = min_density),  # NARW
-  "Ha" = list(min_area = 25, buffer_smooth = 1500, min_density = min_density),  # Northern Bottlenose
-  "Mb" = list(min_area = 25, buffer_smooth = 1500, min_density = min_density),  # Sowerby's
-  "Zc" = list(min_area = 25, buffer_smooth = 1500, min_density = min_density),  # Goose Beaked
-  "MmMe" = list(min_area = 25, buffer_smooth = 1500, min_density = min_density),  # True's/Gervais'
-  
-  # Grouped beaked whales:
-  "All Beaked Whales (PAM)" = list(min_area = 25, buffer_smooth = 1500, min_density = min_density)
-  
-  # Grouped baleen (if needed):
-  # "All Baleen Whales (PAM)" = list(min_area = 10, buffer_smooth = 500, min_density = 0.02),
-  
-  # Example for sightings data (use exact common_name from your data):
-  # "WHALE-NORTH ATLANTIC RIGHT" = list(min_area = 50, buffer_smooth = 1500, min_density = 0.03)
-  
-  # Dense species can use defaults or minimal cleaning:
-  # "Bp" = list(min_area = 5, buffer_smooth = 0, min_density = 0),  # Fin whale
-  # "Mn" = list(min_area = 5, buffer_smooth = 0, min_density = 0)   # Humpback
-)
+CONTOUR_QUANTILE <- 0.90
 
 # Load necessary libraries
 pacman::p_load(sf, tidyverse, readxl, here, leaflet, 
                scales, terra, ggrepel, viridis, ggspatial, spatstat, 
-               dplyr, patchwork, digest)
+               dplyr, patchwork, digest, lubridate)
 
 if(USE_PARALLEL) {
   pacman::p_load(parallel)
@@ -141,12 +91,9 @@ if(USE_PARAMETER_FOLDERS) {
   if(PARAMETER_LABEL != "") {
     param_suffix <- PARAMETER_LABEL
   } else {
-    # Auto-generate from key parameters (use [1] to ensure scalar)
     param_suffix <- paste0(
       "bw", DEFAULT_PAM_SIGMA[1],
-      "_q", gsub("\\.", "", as.character(CONTOUR_QUANTILE[1])),
-      "_m", gsub("\\.", "", as.character(CONTOUR_MIN_DENSITY_THRESHOLD[1])),
-      "_s", CONTOUR_BUFFER_SMOOTH[1]
+      "_q", gsub("\\.", "", as.character(CONTOUR_QUANTILE[1]))
     )
   }
   
@@ -156,9 +103,9 @@ if(USE_PARAMETER_FOLDERS) {
   
   cat("\nUsing parameter folder:", param_suffix, "\n")
 } else {
-  raster_dir <- "output/tif"
-  plot_dir <- "output/FIGS"
-  shapefile_dir <- "output/shapes"
+  raster_dir <- "output/tif/"
+  plot_dir <- "output/FIGS/"
+  shapefile_dir <- "output/shapes/"
 }
 
 # Projections
@@ -204,19 +151,17 @@ load_from_cache <- function(name, subdir = NULL) {
 }
 
 get_cache_hash <- function(...) {
-  # Create a hash of parameters to detect when settings change
   params <- list(...)
   digest::digest(params, algo = "md5")
 }
 
 # ................................
-# CLEANUP - SMART CLEAR OUTPUT FOLDERS------
+# CLEANUP------
 # ................................
 
 if(!FAST_MODE) {
   cat("\n=== CLEANING OUTPUT FOLDERS ===\n\n")
   
-  # Build list of prefixes for analyses that will run
   prefixes_to_clean <- c()
   
   if(RUN_SIGHTINGS) {
@@ -244,12 +189,8 @@ if(!FAST_MODE) {
     }
   }
   
-  # Clear raster output only if not using cache or if clearing cache
   if (!ENABLE_CACHING || CLEAR_CACHE) {
-    
     if (dir.exists(raster_dir[1])) {
-      
-      # Only clean the current parameter folder (no parent folder)
       tif_files <- list.files(
         raster_dir[1],
         pattern = "\\.tif$",
@@ -285,13 +226,20 @@ if(!FAST_MODE) {
     }
   }
   
-  # Clear shapefile output for enabled analyses only
   if (dir.exists(shapefile_dir[1])) {
     shp_files <- list.files(shapefile_dir[1], pattern = "\\.(shp|shx|dbf|prj|cpg)$", 
                             full.names = TRUE, recursive = TRUE)
-    files_to_remove <- shp_files[sapply(shp_files, function(f) {
-      any(sapply(prefixes_to_clean, function(p) grepl(p, basename(f))))
-    })]
+    
+    if(length(shp_files) > 0 && length(prefixes_to_clean) > 0) {
+      # Use vapply to ensure logical vector output
+      should_remove <- vapply(shp_files, function(f) {
+        any(vapply(prefixes_to_clean, function(p) grepl(p, basename(f)), logical(1)))
+      }, logical(1))
+      
+      files_to_remove <- shp_files[should_remove]
+    } else {
+      files_to_remove <- character(0)
+    }
     
     if (length(files_to_remove) > 0) {
       file.remove(files_to_remove)
@@ -300,41 +248,43 @@ if(!FAST_MODE) {
   } else {
     dir.create(shapefile_dir[1], recursive = TRUE)
   }
-}
 
-# Always clear plot output to allow visualization updates (but only for enabled analyses)
-if (dir.exists(plot_dir[1])) {
-  png_files <- list.files(plot_dir[1], pattern = "\\.png$", full.names = TRUE)
-  
-  # Build list of prefixes for enabled analyses
-  plot_prefixes <- c()
-  if(RUN_SIGHTINGS) {
-    if(RUN_INDIVIDUAL_SPECIES) plot_prefixes <- c(plot_prefixes, "sightings_species")
-    if(RUN_FAMILY_GROUPS) plot_prefixes <- c(plot_prefixes, "sightings_odontocetes", "sightings_mysticetes")
+  if (dir.exists(plot_dir[1])) {
+    png_files <- list.files(plot_dir[1], pattern = "\\.png$", full.names = TRUE)
+    
+    plot_prefixes <- c()
+    if(RUN_SIGHTINGS) {
+      if(RUN_INDIVIDUAL_SPECIES) plot_prefixes <- c(plot_prefixes, "sightings_species")
+      if(RUN_FAMILY_GROUPS) plot_prefixes <- c(plot_prefixes, "sightings_odontocetes", "sightings_mysticetes")
+    }
+    if(RUN_PAM) {
+      if(RUN_INDIVIDUAL_PAM) plot_prefixes <- c(plot_prefixes, "pam_baleen_")
+      if(RUN_GROUPED_PAM) plot_prefixes <- c(plot_prefixes, "grouped_baleen_pam")
+    }
+    if(RUN_BEAKED_PAM) {
+      plot_prefixes <- c(plot_prefixes, "pam_beaked_")
+      if(RUN_GROUPED_BEAKED_PAM) plot_prefixes <- c(plot_prefixes, "grouped_beaked_pam")
+    }
+    
+    # Use vapply instead of sapply to ensure logical vector
+    if(length(png_files) > 0 && length(plot_prefixes) > 0) {
+      should_remove <- vapply(png_files, function(f) {
+        any(vapply(plot_prefixes, function(p) grepl(p, basename(f)), logical(1)))
+      }, logical(1))
+      
+      files_to_remove <- png_files[should_remove]
+    } else {
+      files_to_remove <- character(0)
+    }
+    
+    if (length(files_to_remove) > 0) {
+      file.remove(files_to_remove)
+      cat("Removed", length(files_to_remove), "plot files for enabled analyses\n")
+    }
+  } else {
+    dir.create(plot_dir[1], recursive = TRUE)
   }
-  if(RUN_PAM) {
-    if(RUN_INDIVIDUAL_PAM) plot_prefixes <- c(plot_prefixes, "pam_baleen_")
-    if(RUN_GROUPED_PAM) plot_prefixes <- c(plot_prefixes, "grouped_baleen_pam")
-  }
-  if(RUN_BEAKED_PAM) {
-    plot_prefixes <- c(plot_prefixes, "pam_beaked_")
-    if(RUN_GROUPED_BEAKED_PAM) plot_prefixes <- c(plot_prefixes, "grouped_beaked_pam")
-  }
-  
-  # Only remove plots for enabled analyses
-  files_to_remove <- png_files[sapply(png_files, function(f) {
-    any(sapply(plot_prefixes, function(p) grepl(p, basename(f))))
-  })]
-  
-  if (length(files_to_remove) > 0) {
-    file.remove(files_to_remove)
-    cat("Removed", length(files_to_remove), "plot files for enabled analyses\n")
-  }
-} else {
-  dir.create(plot_dir[1], recursive = TRUE)
-}
 
-# Clear cache if requested
 if(CLEAR_CACHE && dir.exists(CACHE_DIR)) {
   cache_files <- list.files(CACHE_DIR, full.names = TRUE, recursive = TRUE)
   if(length(cache_files) > 0) {
@@ -342,7 +292,7 @@ if(CLEAR_CACHE && dir.exists(CACHE_DIR)) {
     cat("Cleared", length(cache_files), "cached files\n")
   }
 }
-
+}
 # ................................
 # CALCULATE PROXIMITY WEIGHTS------
 # ................................
@@ -357,20 +307,15 @@ calculate_proximity_weights <- function(data_sf,
   cat("    - Max distance:", max_distance, "m\n")
   cat("    - Min weight:", min_weight, "\n")
   
-  # Extract coordinates
   coords <- st_coordinates(data_sf)
-  
-  # Calculate distance matrix
   dist_matrix <- as.matrix(dist(coords))
   
-  # For each point, find mean distance to k nearest neighbors
   proximity_scores <- apply(dist_matrix, 1, function(row) {
     sorted_dists <- sort(row)
     nearest_k <- sorted_dists[2:min(k_neighbors + 1, length(sorted_dists))]
     mean(nearest_k)
   })
   
-  # Convert to weights
   weights <- 1 / (1 + (proximity_scores / max_distance))
   weights <- (weights - min(weights)) / (max(weights) - min(weights))
   weights <- pmax(weights, min_weight)
@@ -386,14 +331,47 @@ calculate_proximity_weights <- function(data_sf,
 }
 
 # ................................
-# UNIFIED KDE FUNCTION (OPTIMIZED)------
+# SIMPLIFIED CONTOUR CREATION------
+# ................................
+
+create_contour_90_baseline <- function(kde_raster, output_path) {
+  kde_raster[kde_raster <= 0] <- NA
+  
+  kde_values <- values(kde_raster, mat = FALSE, na.rm = TRUE)
+  threshold_90 <- quantile(kde_values, probs = 0.90, type = 6, na.rm = TRUE)
+  
+  cat("    Threshold value:", threshold_90, "\n")
+  
+  kde_binary <- kde_raster
+  kde_binary[kde_binary < threshold_90] <- NA
+  kde_binary[!is.na(kde_binary)] <- 1
+  
+  kde_poly <- as.polygons(kde_binary, dissolve = TRUE)
+  kde_sf <- st_as_sf(kde_poly)
+  kde_sf <- st_make_valid(kde_sf)
+  
+  cat("    Created", nrow(kde_sf), "polygon(s)\n")
+  
+  kde_sf <- kde_sf %>%
+    mutate(contour = "0.90") %>%
+    select(contour, geometry)
+  
+  write_sf(kde_sf, output_path, delete_dsn = TRUE)
+  
+  cat("    Saved to:", output_path, "\n")
+  
+  return(kde_sf)
+}
+
+# ................................
+# UNIFIED KDE FUNCTION------
 # ................................
 
 performKDE <- function(data_sf, 
                        species_col,
                        species_list, 
                        weight_col = NULL,
-                       buffer_percent = 0.2, 
+                       buffer_percent = 0.05,
                        sigma_val = 10000,
                        window = NULL,
                        output_prefix,
@@ -402,21 +380,22 @@ performKDE <- function(data_sf,
                        plot_output_dir = plot_dir,
                        shapefile_output_dir = shapefile_dir,
                        use_bw_diggle = FALSE,
-                       data_source_label = "KDE") {
+                       data_source_label = "KDE",
+                       resolution = RESOLUTION,
+                       coastline_for_plot = NULL,
+                       owa_for_plot = NULL,
+                       study_area_for_plot = NULL) {
   
-  # Ensure output directories exist
   if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
   if (!dir.exists(plot_output_dir)) dir.create(plot_output_dir, recursive = TRUE)
   
   shapefile_crs <- st_crs(data_sf)$wkt
   
-  # Initialize storage
   raster_list <- list()
   sigma_store <- list() 
   global_min <- Inf
   global_max <- -Inf
   
-  # Sanitize filename helper
   sanitize_filename <- function(name) {
     name <- trimws(name)
     name <- gsub("[/\\:*?\"<>|]", "_", name)
@@ -424,17 +403,17 @@ performKDE <- function(data_sf,
     return(name)
   }
   
-  # Create cache key for this analysis
   cache_params <- list(
     species_list = species_list,
     weight_col = weight_col,
     sigma_val = sigma_val,
     use_bw_diggle = use_bw_diggle,
     output_prefix = output_prefix,
+    resolution = resolution,
+    buffer_percent = buffer_percent,
     proximity_settings = if(!is.null(weight_col)) {
       list(PROXIMITY_K_NEIGHBORS, PROXIMITY_MAX_DISTANCE, PROXIMITY_MIN_WEIGHT)
-    } else NULL,
-    species_bandwidth = if (exists("SPECIES_BANDWIDTH")) SPECIES_BANDWIDTH else NULL
+    } else NULL
   )
   cache_key <- get_cache_hash(cache_params)
   cache_name <- paste0(output_prefix, "_", cache_key)
@@ -445,7 +424,6 @@ performKDE <- function(data_sf,
   
   if(FAST_MODE) {
     cat("\n=== FAST MODE: Loading existing rasters ===\n")
-    # Load from saved TIF files
     for(species in species_list) {
       species_clean <- sanitize_filename(species)
       bw_label <- ifelse(use_bw_diggle, "diggle_bw*", paste0("fixed_bw", round(sigma_val, 0)))
@@ -454,7 +432,6 @@ performKDE <- function(data_sf,
       
       if(length(tif_files) > 0) {
         raster_kd <- rast(tif_files[1])
-        # Extract sigma from filename
         bw_match <- regmatches(basename(tif_files[1]), regexpr("bw[0-9]+", basename(tif_files[1])))
         sigma_used <- as.numeric(gsub("bw", "", bw_match))
         bw_method <- ifelse(grepl("diggle", basename(tif_files[1])), "diggle", "fixed")
@@ -468,7 +445,6 @@ performKDE <- function(data_sf,
           raster_path = tif_files[1]
         )
         
-        # Update global min/max
         local_min <- min(values(raster_kd), na.rm = TRUE)
         local_max <- max(values(raster_kd), na.rm = TRUE)
         global_min <- min(global_min, local_min)
@@ -480,30 +456,24 @@ performKDE <- function(data_sf,
       }
     }
   } else {
-    # Check cache first - but we need to reload rasters from TIF files, not from R objects
-    # NOTE: terra::SpatRaster objects contain C++ pointers that can't be serialized
-    # So we cache metadata and reload rasters from saved TIF files
     cached_metadata <- load_from_cache(cache_name, "rasters")
     
     if(!is.null(cached_metadata)) {
       cat("\n=== Using cached KDE results ===\n")
       
-      # Reload rasters from TIF files (terra objects can't be serialized properly)
       raster_list <- list()
       for(species in names(cached_metadata$raster_list)) {
         raster_path <- cached_metadata$raster_list[[species]]$raster_path
         if(file.exists(raster_path)) {
-          # Reload the raster from file
           raster_kd <- rast(raster_path)
           
-          # Restore the metadata
           raster_list[[species]] <- cached_metadata$raster_list[[species]]
-          raster_list[[species]]$raster <- raster_kd  # Replace with freshly loaded raster
+          raster_list[[species]]$raster <- raster_kd
           
           cat("  Loaded", species, "from", basename(raster_path), "\n")
         } else {
           cat("  Warning: Cached raster not found for", species, "- will recalculate\n")
-          cached_metadata <- NULL  # Force recalculation
+          cached_metadata <- NULL
           break
         }
       }
@@ -531,7 +501,6 @@ performKDE <- function(data_sf,
           tryCatch({
             species_coords <- st_coordinates(current_sf)
             
-            # Create or use provided window
             if(is.null(window)) {
               x_range <- range(species_coords[, "X"])
               y_range <- range(species_coords[, "Y"])
@@ -544,7 +513,6 @@ performKDE <- function(data_sf,
               species_window <- window
             }
             
-            # Apply weights first if provided
             if(!is.null(weight_col)) {
               weights <- current_sf[[weight_col]] * 10000
               points_ppp <- ppp(x = species_coords[,"X"], 
@@ -557,22 +525,18 @@ performKDE <- function(data_sf,
                                 window = species_window)
             }
             
-            # Handle duplicates with jitter
             points_ppp <- rjitter(points_ppp, retry = TRUE, nsim = 1, drop = TRUE)
             
-            # Extract weights after jittering
             if(!is.null(weight_col)) {
               weight_arg <- marks(points_ppp)
             } else {
               weight_arg <- NULL
             }
             
-            # Choose bandwidth method
             if (isTRUE(use_bw_diggle)) {
               sigma_used <- bw.diggle(points_ppp)
               bw_method <- "diggle"
             } else {
-              # Check for species-specific bandwidth
               if(exists("SPECIES_BANDWIDTH") && species %in% names(SPECIES_BANDWIDTH)) {
                 sigma_used <- SPECIES_BANDWIDTH[[species]]
                 bw_method <- "fixed"
@@ -585,22 +549,23 @@ performKDE <- function(data_sf,
             
             sigma_store[[species]] <- list(sigma = sigma_used, method = bw_method)
             
-            # Kernel Density Estimation
+            # Calculate dimensions for specified resolution
             x_extent <- diff(species_window$xrange)
             y_extent <- diff(species_window$yrange)
             dimx <- round(x_extent / resolution)
             dimy <- round(y_extent / resolution)
             
+            cat("  Resolution:", resolution, "m (grid dimensions:", dimx, "x", dimy, ")\n")
+            
+            # MATCH CE_COLLAB: Remove adaptive parameter
             kd_result <- density.ppp(points_ppp, 
                                      sigma = sigma_used, 
                                      positive = TRUE,
                                      kernel = "gaussian", 
                                      weights = weight_arg,
-                                     dimyx = c(dimy, dimx), 
-                                     diggle = TRUE,
-                                     adaptive = F)
+                                     dimyx = c(dimy, dimx),
+                                     diggle = TRUE)
             
-            # Convert to SpatRaster
             raster_kd <- rast(kd_result)
             crs(raster_kd) <- shapefile_crs
             
@@ -609,7 +574,6 @@ performKDE <- function(data_sf,
             if (!is.na(max_val) && max_val > 0) {
               raster_kd <- raster_kd / max_val
               
-              # Apply threshold if specified
               if(!is.null(threshold_quantile)) {
                 kde_vals <- values(raster_kd, mat = FALSE, na.rm = TRUE)
                 threshold <- quantile(kde_vals, threshold_quantile, na.rm = TRUE)
@@ -617,19 +581,20 @@ performKDE <- function(data_sf,
               }
             }
             
-            # Update global min/max
+            # Report actual resolution
+            actual_res <- res(raster_kd)
+            cat("  Actual raster resolution:", round(mean(actual_res), 2), "m\n")
+            
             local_min <- min(values(raster_kd), na.rm = TRUE)
             local_max <- max(values(raster_kd), na.rm = TRUE)
             global_min <- min(global_min, local_min)
             global_max <- max(global_max, local_max)
             
-            # Save raster with bandwidth info in filename
             bw_label <- paste0(bw_method, "_bw", round(sigma_used, 0))
             raster_filename <- paste0(output_dir, "KDE_", output_prefix, "_", 
                                       sanitize_filename(species), "_", bw_label, ".tif")
             writeRaster(raster_kd, filename = raster_filename, overwrite = TRUE)
             
-            # Store raster and sigma
             raster_list[[species]] <- list(raster = raster_kd, 
                                            sigma = sigma_used, 
                                            method = bw_method,
@@ -642,8 +607,6 @@ performKDE <- function(data_sf,
         }
       }
       
-      # Cache the results - but DON'T cache the raster objects (they contain C++ pointers)
-      # Only cache metadata, rasters are already saved as TIF files
       cache_obj <- list(
         raster_list = lapply(raster_list, function(x) {
           list(
@@ -651,7 +614,6 @@ performKDE <- function(data_sf,
             method = x$method,
             bw_label = x$bw_label,
             raster_path = x$raster_path
-            # Don't include x$raster - it can't be serialized
           )
         }),
         sigma_store = sigma_store,
@@ -663,190 +625,55 @@ performKDE <- function(data_sf,
   }
   
   #.............................
-  # GENERATE QUANTILE SHAPEFILES (OPTIMIZED)------
+  # GENERATE QUANTILE SHAPEFILES------
   #.............................
   
-  cat("\n=== GENERATING QUANTILE SHAPEFILES ===\n")
+  cat("\n=== GENERATING QUANTILE SHAPEFILES (BASELINE METHOD) ===\n")
   
   if (!dir.exists(shapefile_output_dir)) {
     dir.create(shapefile_output_dir, recursive = TRUE)
   }
   
-  # Create subdirectories
-  quantile_dirs <- c("q85", "q90", "q95")
-  for(qdir in quantile_dirs) {
-    qpath <- file.path(shapefile_output_dir, qdir)
-    if(!dir.exists(qpath)) dir.create(qpath, recursive = TRUE)
-  }
+  q90_dir <- file.path(shapefile_output_dir, "q90")
+  if(!dir.exists(q90_dir)) dir.create(q90_dir, recursive = TRUE)
   
-  # Function to process one species
-  processKDE_to_shapefile <- function(species_name, raster_data, output_dir = shapefile_output_dir) {
-    
-    tif_file <- raster_data$raster_path
-    kde_raster <- rast(tif_file)
-    raster_crs <- crs(kde_raster)
-    
-    # Get species-specific settings or use defaults
-    if(exists("SPECIES_CONTOUR_SETTINGS") && species_name %in% names(SPECIES_CONTOUR_SETTINGS)) {
-      species_settings <- SPECIES_CONTOUR_SETTINGS[[species_name]]
-      min_area_setting <- if(!is.null(species_settings$min_area)) species_settings$min_area else CONTOUR_MIN_AREA_KM2
-      buffer_smooth_setting <- if(!is.null(species_settings$buffer_smooth)) species_settings$buffer_smooth else CONTOUR_BUFFER_SMOOTH
-      min_density_setting <- if(!is.null(species_settings$min_density)) species_settings$min_density else CONTOUR_MIN_DENSITY_THRESHOLD
-      cat("  Using species-specific settings for", species_name, "\n")
-    } else {
-      min_area_setting <- CONTOUR_MIN_AREA_KM2
-      buffer_smooth_setting <- CONTOUR_BUFFER_SMOOTH
-      min_density_setting <- CONTOUR_MIN_DENSITY_THRESHOLD
-    }
-    
-    # Apply minimum density threshold BEFORE creating contours
-    # This removes spurious low-density areas from isolated points
-    if(min_density_setting > 0) {
-      kde_raster[kde_raster < min_density_setting] <- NA
-      cat("  Applied minimum density threshold:", min_density_setting, "\n")
-    }
-    
-    kde_raster[kde_raster <= 0] <- NA
-    
-    base_name <- tools::file_path_sans_ext(basename(tif_file))
-    species_clean <- str_extract(base_name, "(?<=KDE_)[^_]+_.*")
-    
-    kde_values <- values(kde_raster, mat = FALSE, na.rm = TRUE)
-    
-    quantile_levels <- c(0.85, 0.90, 0.95)
-    quantile_labels <- c("85%", "90%", "95%")
-    quantile_dirs <- c("q85", "q90", "q95")
-    
-    shapefile_paths <- list()
-    
-    for(i in seq_along(quantile_levels)) {
-      q_level <- quantile_levels[i]
-      q_label <- quantile_labels[i]
-      q_dir <- quantile_dirs[i]
-      
-      threshold <- quantile(kde_values, probs = q_level, type = 6, na.rm = TRUE)
-      
-      kde_binary <- kde_raster
-      kde_binary[kde_binary < threshold] <- NA
-      kde_binary[!is.na(kde_binary)] <- 1
-      
-      kde_poly <- as.polygons(kde_binary, dissolve = TRUE)
-      kde_sf <- st_as_sf(kde_poly) %>%
-        st_make_valid() %>%
-        mutate(Quantile = q_label)
-      
-      # Apply morphological smoothing (buffer out then buffer in) if enabled
-      # This removes thin extensions and cross-pattern artifacts
-      if(buffer_smooth_setting > 0) {
-        kde_sf <- kde_sf %>%
-          st_buffer(dist = -buffer_smooth_setting) %>%  # Erosion (shrink)
-          st_buffer(dist = buffer_smooth_setting) %>%   # Dilation (grow back)
-          st_make_valid()
-        
-        cat("    Applied buffer smoothing (", buffer_smooth_setting, "m) to", q_label, "\n")
-      }
-      
-      # Filter out small polygons (noise) if CONTOUR_MIN_AREA_KM2 is set
-      if(min_area_setting > 0) {
-        # Calculate area in km²
-        kde_sf <- kde_sf %>%
-          mutate(area_km2 = as.numeric(st_area(geometry)) / 1e6) %>%
-          filter(area_km2 >= min_area_setting) %>%
-          select(-area_km2)
-        
-        cat("    Filtered polygons <", min_area_setting, "km² for", q_label, "\n")
-      }
-      
-      # Simplify geometry if tolerance is set
-      if(exists("CONTOUR_SIMPLIFY_TOLERANCE") && CONTOUR_SIMPLIFY_TOLERANCE > 0) {
-        kde_sf <- kde_sf %>%
-          st_simplify(dTolerance = CONTOUR_SIMPLIFY_TOLERANCE, preserveTopology = TRUE)
-        
-        cat("    Simplified with tolerance ", CONTOUR_SIMPLIFY_TOLERANCE, "m\n")
-      }
-      
-      kde_sf <- kde_sf %>%
-        select(Quantile, geometry)
-      
-      output_path <- file.path(output_dir, q_dir, paste0("KDE_", species_clean, ".shp"))
-      write_sf(kde_sf, output_path, delete_dsn = TRUE)
-      
-      shapefile_paths[[q_label]] <- output_path
-    }
-    
-    return(shapefile_paths[["85%"]])
-  }
-  
-  # Process shapefiles (with optional parallelization)
   shapefile_paths <- list()
   
-  if(USE_PARALLEL && length(raster_list) > 2) {
-    cat("Using parallel processing for", length(raster_list), "species...\n")
-    cl <- makeCluster(n_cores)
-    
-    # Load required libraries on each worker first
-    clusterEvalQ(cl, {
-      library(terra)
-      library(sf)
-      library(dplyr)
-      library(stringr)
+  for(species in names(raster_list)) {
+    tryCatch({
+      tif_file <- raster_list[[species]]$raster_path
+      kde_raster <- rast(tif_file)
+      
+      base_name <- tools::file_path_sans_ext(basename(tif_file))
+      species_clean <- str_extract(base_name, "(?<=KDE_)[^_]+_.*")
+      
+      contour_filename <- paste0(species_clean, "_contour90.shp")
+      contour_path <- file.path(q90_dir, contour_filename)
+      
+      cat("  Creating contour for", species, "\n")
+      contour_sf <- create_contour_90_baseline(kde_raster, contour_path)
+      
+      shapefile_paths[[species]] <- contour_path
+      raster_list[[species]]$shapefile_path <- contour_path
+      raster_list[[species]]$contour_sf <- contour_sf
+      
+    }, error = function(e) {
+      cat("  Error:", species, "-", conditionMessage(e), "\n")
     })
-    
-    # Export required objects and functions
-    clusterExport(cl, c("processKDE_to_shapefile", "shapefile_output_dir", 
-                        "raster_list",
-                        "CONTOUR_MIN_AREA_KM2", "CONTOUR_SIMPLIFY_TOLERANCE",
-                        "CONTOUR_BUFFER_SMOOTH", "CONTOUR_MIN_DENSITY_THRESHOLD",
-                        "SPECIES_CONTOUR_SETTINGS"),
-                  envir = environment())
-    
-    # Process in parallel
-    results <- parLapply(cl, names(raster_list), function(species) {
-      tryCatch({
-        processKDE_to_shapefile(species, raster_list[[species]])
-      }, error = function(e) {
-        list(error = conditionMessage(e))
-      })
-    })
-    
-    stopCluster(cl)
-    
-    # Organize results
-    names(results) <- names(raster_list)
-    shapefile_paths <- results
-  } else {
-    for(species in names(raster_list)) {
-      tryCatch({
-        shp_path <- processKDE_to_shapefile(species, raster_list[[species]])
-        shapefile_paths[[species]] <- shp_path
-        raster_list[[species]]$shapefile_path <- shp_path
-      }, error = function(e) {
-        cat("  Error:", species, "-", conditionMessage(e), "\n")
-      })
-    }
   }
   
-  cat("\n✓ Created", length(shapefile_paths), "shapefiles\n\n")
+  cat("\n✓ Created", length(shapefile_paths), "baseline contour shapefiles\n\n")
   
   #.............................
   # CREATE PLOTS------
   #.............................
   
-  # Map quantile value to directory name
-  quantile_dir_map <- c("0.85" = "q85", "0.90" = "q90", "0.95" = "q95")
-  contour_dir <- quantile_dir_map[as.character(CONTOUR_QUANTILE)]
-  
-  if(is.na(contour_dir)) {
-    warning("CONTOUR_QUANTILE must be 0.85, 0.90, or 0.95. Defaulting to 0.85")
-    contour_dir <- "q85"
-  }
+  contour_dir <- "q90"
   
   # Create readable species name mapping
   readable_names <- list()
   for(sp in species_list) {
-    # Check if it's a species code (short alphanumeric, typically 2-4 chars)
     if(nchar(sp) <= 6 && !grepl(" ", sp)) {
-      # PAM species codes
       if(sp == "Bb") readable_names[[sp]] <- "Sei Whale"
       else if(sp == "Bm") readable_names[[sp]] <- "Blue Whale"
       else if(sp == "Bp") readable_names[[sp]] <- "Fin Whale"
@@ -857,39 +684,21 @@ performKDE <- function(data_sf,
       else if(sp == "Mb") readable_names[[sp]] <- "Sowerby's Beaked Whale"
       else if(sp == "Zc") readable_names[[sp]] <- "Goose Beaked Whale"
       else if(sp == "MmMe") readable_names[[sp]] <- "True's/Gervais' Beaked Whale"
-      else readable_names[[sp]] <- sp  # Use code as-is if not in list
+      else readable_names[[sp]] <- sp
     } else {
-      # Already a readable name (sightings data or grouped PAM)
       readable_names[[sp]] <- sp
     }
   }
   
-  # Load base layers (with caching)
-  land_for_plotting <- load_from_cache("land_for_plotting", "spatial")
-  if(is.null(land_for_plotting)) {
-    land_path <- "/Users/chirp/CODE/shapefiles/coastline/worldcountries/ne_50m_admin_0_countries.shp"
-    if(file.exists(land_path)) {
-      land_for_plotting <- st_read(land_path, quiet = TRUE) %>%
-        filter(CONTINENT == "North America") %>%
-        st_transform(shapefile_crs)
-      save_to_cache(land_for_plotting, "land_for_plotting", "spatial")
-    }
+  # CRITICAL FIX: Use study_area bbox for consistent plotting extent
+  if(!is.null(study_area_for_plot)) {
+    study_bbox <- st_bbox(study_area_for_plot)
+    xlims <- c(study_bbox["xmin"], study_bbox["xmax"])
+    ylims <- c(study_bbox["ymin"], study_bbox["ymax"])
+  } else {
+    xlims <- NULL
+    ylims <- NULL
   }
-  
-  osw_wind_for_plotting <- load_from_cache("osw_wind_for_plotting", "spatial")
-  if(is.null(osw_wind_for_plotting)) {
-    osw_wind_path <- "shapefiles/WEA/Designated_WEAs_25_07_29.shp"
-    if(file.exists(osw_wind_path)) {
-      osw_wind_for_plotting <- st_read(osw_wind_path, quiet = TRUE) %>%
-        st_transform(shapefile_crs)
-      save_to_cache(osw_wind_for_plotting, "osw_wind_for_plotting", "spatial")
-    }
-  }
-  
-  # Get study area bounds
-  study_bbox <- st_bbox(study_area)
-  xlims <- c(study_bbox["xmin"], study_bbox["xmax"])
-  ylims <- c(study_bbox["ymin"], study_bbox["ymax"])
   
   plot_list <- list()
   
@@ -903,40 +712,29 @@ performKDE <- function(data_sf,
       sigma_used <- raster_data$sigma
       bw_method <- raster_data$method
       bw_label <- raster_data$bw_label
-      shapefile_path <- raster_data$shapefile_path
       
       species_display <- readable_names[[species]]
       
-      # Convert raster to data frame
       kde_df <- as.data.frame(raster_kd, xy = TRUE) %>%
         filter(!is.na(lyr.1)) %>%
         mutate(lyr.1_sqrt = sqrt(lyr.1))
       
-      # Load contour shapefile
-      contour_sf <- NULL
-      species_clean <- sanitize_filename(species)
-      shapefile_name <- paste0("KDE_", output_prefix, "_", species_clean, "_", bw_label, ".shp")
-      shapefile_path <- file.path("output/shapes/", contour_dir, shapefile_name)
+      contour_sf <- raster_data$contour_sf
       
-      if(file.exists(shapefile_path)) {
-        tryCatch({
-          contour_sf <- st_read(shapefile_path, quiet = TRUE)
-        }, error = function(e) {
-          contour_sf <- NULL
-        })
+      if(!is.null(contour_sf)) {
+        cat("    Contour available:", nrow(contour_sf), "features\n")
       }
       
-      # Get source data points
       species_points <- data_sf[data_sf[[species_col]] == species, ]
       is_pam <- "site" %in% names(species_points) || "deployment" %in% names(species_points)
       
       bw_text <- paste0(toupper(bw_method), " BW: ", round(sigma_used, 0), "m")
-      contour_text <- paste0(CONTOUR_QUANTILE * 100, "% contour")
+      contour_text <- paste0(CONTOUR_QUANTILE * 100, "% contour (baseline)")
       plot_title <- paste0(data_source_label, ": ", species_display)
       
-      # Build plot
       p <- ggplot()
       
+      # Add KDE tiles first
       p <- p + geom_tile(data = kde_df, aes(x = x, y = y, fill = lyr.1_sqrt)) +
         scale_fill_viridis_c(option = "viridis", 
                              name = "sqrt(Density)",
@@ -944,20 +742,25 @@ performKDE <- function(data_sf,
                              begin = 0.15,
                              end = 1.0)
       
+      # Add contour
       if(!is.null(contour_sf) && nrow(contour_sf) > 0) {
         p <- p + geom_sf(data = contour_sf, fill = NA, color = "white", 
-                         size = 1, linetype = "solid")
+                         linewidth = .8, linetype = "solid")
       }
       
-      if(!is.null(land_for_plotting)) {
-        p <- p + geom_sf(data = land_for_plotting, fill = "grey90", color = "grey70", size = 0.3)
+      # Add coastline (CROPPED to study area)
+      if(!is.null(coastline_for_plot)) {
+        p <- p + geom_sf(data = coastline_for_plot, fill = "grey90", 
+                         color = "grey70", linewidth = 0.3)
       }
       
-      if(!is.null(osw_wind_for_plotting)) {
-        p <- p + geom_sf(data = osw_wind_for_plotting, fill = NA, color = "red", 
-                         size = 0.5, linetype = "dashed")
+      # Add OWA
+      if(!is.null(owa_for_plot)) {
+        p <- p + geom_sf(data = owa_for_plot, fill = NA, color = "red", 
+                         linewidth = 0.5, linetype = "dashed")
       }
       
+      # Add data points
       if(nrow(species_points) > 0) {
         if(is_pam) {
           p <- p + geom_sf(data = species_points, color = "white", size = 1.5, 
@@ -968,18 +771,21 @@ performKDE <- function(data_sf,
         }
       }
       
-      p <- p + geom_sf(data = study_area, fill = NA, color = "black", size = 0.8)
+      # Add study area outline (top layer)
+      if(!is.null(study_area_for_plot)) {
+        p <- p + geom_sf(data = study_area_for_plot, fill = NA, color = "black", linewidth = 0.8)
+      }
+      
+      # CRITICAL FIX: Use explicit xlim/ylim to match study area
+      if(!is.null(xlims) && !is.null(ylims)) {
+        p <- p + coord_sf(crs = st_crs(UTM20), xlim = xlims, ylim = ylims, expand = FALSE)
+      } else {
+        p <- p + coord_sf(crs = st_crs(UTM20))
+      }
       
       p <- p + 
-        coord_sf(crs = st_crs(shapefile_crs), xlim = xlims, ylim = ylims, expand = FALSE) +
         theme_minimal() +
         labs(title = plot_title) +
-        annotate("text", x = xlims[2], y = ylims[2], 
-                 label = bw_text,
-                 hjust = 1.1, vjust = 1.5, size = 3, color = "orange") +
-        annotate("text", x = xlims[2], y = ylims[2], 
-                 label = contour_text,
-                 hjust = 1.1, vjust = 3.0, size = 3, color = "white") +
         theme(
           axis.title = element_blank(),
           axis.ticks = element_blank(),
@@ -988,6 +794,17 @@ performKDE <- function(data_sf,
           plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
           panel.grid = element_line(color = "grey95")
         )
+      
+      # Add annotations
+      if(!is.null(xlims) && !is.null(ylims)) {
+        p <- p +
+          annotate("text", x = xlims[2], y = ylims[2], 
+                   label = bw_text,
+                   hjust = 1.1, vjust = 1.5, size = 3, color = "orange") +
+          annotate("text", x = xlims[2], y = ylims[2], 
+                   label = contour_text,
+                   hjust = 1.1, vjust = 3.0, size = 3, color = "white")
+      }
       
       plot_list[[species]] <- p
     }
@@ -1008,7 +825,6 @@ performKDE <- function(data_sf,
       plot_combined <- NULL
     }
     
-    # Save individual plots
     for(species in names(plot_list)) {
       if(!is.null(plot_list[[species]])) {
         bw_label <- raster_list[[species]]$bw_label
@@ -1060,9 +876,64 @@ if(is.null(common_window)) {
   common_window <- owin(xrange = expanded_x_range, yrange = expanded_y_range)
   
   save_to_cache(common_window, "common_window", "spatial")
+  
+  cat("Common window created:\n")
+  cat("  X range:", common_window$xrange, "\n")
+  cat("  Y range:", common_window$yrange, "\n")
 }
 
 cat("Study area loaded\n")
+cat("Window buffer:", buffer_percent * 100, "%\n\n")
+
+#.............................
+# LOAD BASE LAYERS FOR PLOTTING (WITH CACHING)-------
+#.............................
+
+cat("=== LOADING BASE LAYERS FOR PLOTTING ===\n\n")
+
+# CRITICAL FIX: Crop coastline to study area (matching CE_Collab Line 289-295)
+coastline <- load_from_cache("coastline_cropped", "spatial")
+if(is.null(coastline)) {
+  coastline_path <- "shapefiles/Canada/NE_10mLand.shp"
+  if(file.exists(coastline_path)) {
+    coastline_full <- st_read(coastline_path, quiet = TRUE) %>%
+      st_transform(UTM20)
+    
+    # MATCH CE_COLLAB: Use st_crop to clip to study area bbox
+    coastline <- st_crop(coastline_full, st_bbox(study_area))
+    
+    save_to_cache(coastline, "coastline_cropped", "spatial")
+    cat("Loaded and cropped coastline to study area\n")
+  } else {
+    coastline <- NULL
+    cat("Coastline file not found\n")
+  }
+} else {
+  cat("Loaded coastline from cache (already cropped)\n")
+}
+
+# Load OWA and crop to study area (matching CE_Collab Line 298-304)
+owa <- load_from_cache("owa_cropped", "spatial")
+if(is.null(owa)) {
+  owa_path <- "shapefiles/WEA/Designated_WEAs_25_07_29.shp"
+  if(file.exists(owa_path)) {
+    owa_full <- st_read(owa_path, quiet = TRUE) %>%
+      st_transform(UTM20)
+    
+    # MATCH CE_COLLAB: Use st_crop to clip to study area bbox
+    owa <- st_crop(owa_full, st_bbox(study_area))
+    
+    save_to_cache(owa, "owa_cropped", "spatial")
+    cat("Loaded and cropped OWA to study area\n")
+  } else {
+    owa <- NULL
+    cat("OWA file not found\n")
+  }
+} else {
+  cat("Loaded OWA from cache (already cropped)\n")
+}
+
+cat("\n")
 
 #.............................
 # PROCESS COMBINED SIGHTINGS DATA (WITH CACHING)----
@@ -1072,37 +943,31 @@ if(RUN_SIGHTINGS) {
   
   cat("\n=== PROCESSING COMBINED SIGHTINGS DATA ===\n\n")
   
-  # Try to load from cache first
   cetacean_sf <- load_from_cache("cetacean_sf_2015plus", "sightings")
   species_25plus <- load_from_cache("species_25plus", "sightings")
   
   if(is.null(cetacean_sf) || is.null(species_25plus)) {
-    # Load and process data
     combined_data <- read_csv("input/2025/combined_sights/combined_dedup_1km_day_clipped_classified.csv",
                               show_col_types = FALSE)
     
     cat("Total records loaded:", nrow(combined_data), "\n")
     
-    # Filter to 2015 onwards
     combined_data <- combined_data %>%
       filter(as.Date(date_utc) >= as.Date("2015-01-01"))
     
     cat("Records after 2015+ filter:", nrow(combined_data), "\n")
     
-    # Create sf object
     combined_sf <- st_as_sf(combined_data, 
                             coords = c("lon", "lat"), 
                             crs = 4326) %>%
       st_transform(UTM20) %>%
       st_make_valid()
     
-    # Filter to cetaceans
     cetacean_sf <- combined_sf %>%
       filter(cetacean_family %in% c("odontocete", "mysticete"))
     
     cat("Cetacean records:", nrow(cetacean_sf), "\n")
     
-    # Get species counts
     species_counts <- cetacean_sf %>%
       mutate(common_name = case_when(
         str_detect(common_name, "SEI") ~ "WHALE-SEI",
@@ -1117,7 +982,6 @@ if(RUN_SIGHTINGS) {
       filter(n_records >= 25) %>%
       pull(common_name)
     
-    # Cache the processed data
     save_to_cache(cetacean_sf, "cetacean_sf_2015plus", "sightings")
     save_to_cache(species_25plus, "species_25plus", "sightings")
     
@@ -1140,7 +1004,6 @@ if(RUN_SIGHTINGS) {
       species_sf <- cetacean_sf %>%
         filter(common_name %in% species_25plus)
       
-      # Check if weights are cached
       weights_cache_key <- get_cache_hash(list(
         nrow(species_sf),
         PROXIMITY_K_NEIGHBORS,
@@ -1169,7 +1032,12 @@ if(RUN_SIGHTINGS) {
         output_prefix = "sightings_species_proximity",
         sigma_val = DEFAULT_SIGHTINGS_SIGMA,
         use_bw_diggle = USE_BW_DIGGLE_INDIVIDUAL,
-        data_source_label = "Sightings (Proximity Weighted)"
+        data_source_label = "Sightings (Proximity Weighted)",
+        resolution = RESOLUTION,
+        buffer_percent = 0.05,
+        coastline_for_plot = coastline,
+        owa_for_plot = owa,
+        study_area_for_plot = study_area
       )
       
     } else {
@@ -1187,7 +1055,12 @@ if(RUN_SIGHTINGS) {
         output_prefix = "sightings_species",
         sigma_val = DEFAULT_SIGHTINGS_SIGMA,
         use_bw_diggle = USE_BW_DIGGLE_INDIVIDUAL,
-        data_source_label = "Sightings (Unweighted)"
+        data_source_label = "Sightings (Unweighted)",
+        resolution = RESOLUTION,
+        buffer_percent = 0.05,
+        coastline_for_plot = coastline,
+        owa_for_plot = owa,
+        study_area_for_plot = study_area
       )
     }
   }
@@ -1200,7 +1073,6 @@ if(RUN_SIGHTINGS) {
     
     cat("\n=== FAMILY-LEVEL KDEs ===\n\n")
     
-    # Odontocetes
     odontocete_sf <- cetacean_sf %>%
       filter(cetacean_family == "odontocete") %>%
       mutate(family_group = "Odontocetes (All Toothed Whales)")
@@ -1226,7 +1098,12 @@ if(RUN_SIGHTINGS) {
           output_prefix = "sightings_odontocetes_proximity",
           sigma_val = DEFAULT_SIGHTINGS_SIGMA,
           use_bw_diggle = USE_BW_DIGGLE_FAMILY,
-          data_source_label = "Sightings (Proximity Weighted)"
+          data_source_label = "Sightings (Proximity Weighted)",
+          resolution = RESOLUTION,
+          buffer_percent = 0.05,
+          coastline_for_plot = coastline,
+          owa_for_plot = owa,
+          study_area_for_plot = study_area
         )
       } else {
         res_odontocete <- performKDE(
@@ -1238,12 +1115,16 @@ if(RUN_SIGHTINGS) {
           output_prefix = "sightings_odontocetes",
           sigma_val = DEFAULT_SIGHTINGS_SIGMA,
           use_bw_diggle = USE_BW_DIGGLE_FAMILY,
-          data_source_label = "Sightings (Unweighted)"
+          data_source_label = "Sightings (Unweighted)",
+          resolution = RESOLUTION,
+          buffer_percent = 0.05,
+          coastline_for_plot = coastline,
+          owa_for_plot = owa,
+          study_area_for_plot = study_area
         )
       }
     }
     
-    # Mysticetes
     mysticete_sf <- cetacean_sf %>%
       filter(cetacean_family == "mysticete") %>%
       mutate(family_group = "Mysticetes (All Baleen Whales)")
@@ -1269,7 +1150,12 @@ if(RUN_SIGHTINGS) {
           output_prefix = "sightings_mysticetes_proximity",
           sigma_val = DEFAULT_SIGHTINGS_SIGMA,
           use_bw_diggle = USE_BW_DIGGLE_FAMILY,
-          data_source_label = "Sightings (Proximity Weighted)"
+          data_source_label = "Sightings (Proximity Weighted)",
+          resolution = RESOLUTION,
+          buffer_percent = 0.05,
+          coastline_for_plot = coastline,
+          owa_for_plot = owa,
+          study_area_for_plot = study_area
         )
       } else {
         res_mysticete <- performKDE(
@@ -1281,7 +1167,12 @@ if(RUN_SIGHTINGS) {
           output_prefix = "sightings_mysticetes",
           sigma_val = DEFAULT_SIGHTINGS_SIGMA,
           use_bw_diggle = USE_BW_DIGGLE_FAMILY,
-          data_source_label = "Sightings (Unweighted)"
+          data_source_label = "Sightings (Unweighted)",
+          resolution = RESOLUTION,
+          buffer_percent = 0.05,
+          coastline_for_plot = coastline,
+          owa_for_plot = owa,
+          study_area_for_plot = study_area
         )
       }
     }
@@ -1296,26 +1187,45 @@ if(RUN_PAM) {
   
   cat("\n=== PROCESSING PAM DATA ===\n\n")
   
-  # Try to load from cache
-  baleen_sf <- load_from_cache("baleen_sf_clipped", "pam")
+  # CRITICAL: Use raw file and process like CE_Collab
+  filepath_raw <- 'input/2025/baleen_presence_laura_2025.csv'
+  filepath_processed <- 'input/2025/baleen_presence_days_laura_2025.csv'
   
-  if(is.null(baleen_sf)) {
-    filepath <- 'input/2025/baleen_presence_days_laura_2025.csv'
-    baleen_PA <- read.csv(filepath)
+  if(file.exists(filepath_raw)) {
+    cat("Using raw PAM file (matching CE_Collab format)\n")
     
-    baleen_sf_full <- baleen_PA %>%
-      st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
-      st_transform(crs = UTM20)
+    baleen_PA_raw <- read.csv(filepath_raw)
     
-    baleen_sf <- st_intersection(baleen_sf_full, study_area)
+    # Process like CE_Collab does (exactly matching KDES_CE_Collab.R lines 335-348)
+    baleen_PA <- baleen_PA_raw %>%
+      mutate(rec_date = as.Date(rec_date)) %>%
+      group_by(site, latitude, longitude, species) %>%
+      summarise(
+        detection_days = sum(presence, na.rm = TRUE),
+        effort_days = n_distinct(rec_date),
+        proportion_det = detection_days / effort_days,
+        .groups = "drop"
+      ) %>%
+      filter(effort_days > 0)
     
-    save_to_cache(baleen_sf, "baleen_sf_clipped", "pam")
-    cat("Cached PAM data\n")
+    cat("Processed raw PAM data like CE_Collab\n")
+    cat("  Total station-species combinations:", nrow(baleen_PA), "\n")
+    
+  } else if(file.exists(filepath_processed)) {
+    cat("Warning: Using processed PAM file (may differ from CE_Collab)\n")
+    baleen_PA <- read.csv(filepath_processed)
   } else {
-    cat("Loaded PAM data from cache\n")
+    stop("No PAM file found!")
   }
   
-  cat("PAM records:", nrow(baleen_sf), "\n\n")
+  baleen_sf_full <- baleen_PA %>%
+    st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
+    st_transform(crs = UTM20)
+  
+  baleen_sf <- st_intersection(baleen_sf_full, study_area)
+  
+  cat("PAM records:", nrow(baleen_sf), "\n")
+  cat("Unique sites:", length(unique(baleen_sf$site)), "\n\n")
   
   species_list_pam <- c("Bb", "Bm", "Bp", "Mn", "Eg", "Ba")
   
@@ -1340,7 +1250,7 @@ if(RUN_PAM) {
       species_readable <- pam_species_names[species_code]
       
       if(nrow(species_data) > 0) {
-        cat("Processing", species_readable, "\n")
+        cat("Processing", species_readable, "(n =", nrow(species_data), ")\n")
         
         res_pam_individual <- performKDE(
           data_sf = species_data, 
@@ -1351,7 +1261,12 @@ if(RUN_PAM) {
           output_prefix = paste0("pam_baleen_", species_readable),
           sigma_val = DEFAULT_PAM_SIGMA,
           use_bw_diggle = FALSE,
-          data_source_label = "Baleen PAM"
+          data_source_label = "Baleen PAM",
+          resolution = RESOLUTION,
+          buffer_percent = 0.05,
+          coastline_for_plot = coastline,
+          owa_for_plot = owa,
+          study_area_for_plot = study_area
         )
       }
     }
@@ -1385,7 +1300,12 @@ if(RUN_PAM) {
       output_prefix = "grouped_baleen_pam",
       sigma_val = DEFAULT_PAM_SIGMA,
       use_bw_diggle = FALSE,
-      data_source_label = "PAM"
+      data_source_label = "PAM",
+      resolution = RESOLUTION,
+      buffer_percent = 0.05,
+      coastline_for_plot = coastline,
+      owa_for_plot = owa,
+      study_area_for_plot = study_area
     )
   }
 }
@@ -1400,9 +1320,6 @@ if(RUN_BEAKED_PAM) {
   
   beaked_sf <- load_from_cache("beaked_sf_clipped", "pam")
   
-  # NOTE: If stations with 0 detections aren't showing, delete cache/pam/beaked_sf_clipped.rds
-  # or set CLEAR_CACHE <- TRUE once to regenerate
-  
   if(is.null(beaked_sf)) {
     beaked_filepath <- 'input/2025/beaked_PAM/beaked_pam_results_2026-01-12.csv'
     beaked_PA <- read_csv(beaked_filepath, show_col_types = FALSE)
@@ -1415,7 +1332,6 @@ if(RUN_BEAKED_PAM) {
         proportion_det = detection_days / effort_days,
         .groups = "drop"
       )
-    # NOTE: Keeping all stations including those with 0 detections for plotting
     
     beaked_sf_full <- beaked_summary %>%
       st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
@@ -1447,7 +1363,7 @@ if(RUN_BEAKED_PAM) {
     species_readable <- beaked_species_names[species_code]
     
     if(nrow(species_data) > 0) {
-      cat("Processing", species_readable, "\n")
+      cat("Processing", species_readable, "(n =", nrow(species_data), ")\n")
       
       res_beaked_individual <- performKDE(
         data_sf = species_data, 
@@ -1458,7 +1374,12 @@ if(RUN_BEAKED_PAM) {
         output_prefix = paste0("pam_beaked_", species_readable),
         sigma_val = DEFAULT_PAM_SIGMA,
         use_bw_diggle = FALSE,
-        data_source_label = "Beaked Whale PAM"
+        data_source_label = "Beaked Whale PAM",
+        resolution = RESOLUTION,
+        buffer_percent = 0.05,
+        coastline_for_plot = coastline,
+        owa_for_plot = owa,
+        study_area_for_plot = study_area
       )
     }
   }
@@ -1487,7 +1408,12 @@ if(RUN_BEAKED_PAM) {
       output_prefix = "grouped_beaked_pam",
       sigma_val = DEFAULT_PAM_SIGMA,
       use_bw_diggle = FALSE,
-      data_source_label = "Beaked Whale PAM"
+      data_source_label = "Beaked Whale PAM",
+      resolution = RESOLUTION,
+      buffer_percent = 0.05,
+      coastline_for_plot = coastline,
+      owa_for_plot = owa,
+      study_area_for_plot = study_area
     )
   }
 }
@@ -1497,6 +1423,12 @@ if(RUN_BEAKED_PAM) {
 #.............................
 
 cat("\n=== ANALYSIS COMPLETE ===\n")
+cat("VERSION 3: Fixed coastline/plot extent\n")
+cat("- Coastline cropped to study_area using st_crop()\n")
+cat("- Plot extent fixed to study_area bbox\n")
+cat("- Matching CE_Collab exactly\n")
+cat("Resolution:", RESOLUTION, "m\n")
+cat("Window buffer: 5%\n")
 cat("Mode:", ifelse(FAST_MODE, "FAST (plots only)", "FULL"), "\n")
 cat("Caching:", ifelse(ENABLE_CACHING, "ENABLED", "DISABLED"), "\n")
 if(RUN_SIGHTINGS) cat("✓ Sightings processed\n")
@@ -1509,5 +1441,6 @@ cat("  Shapefiles:", shapefile_dir, "\n")
 if(ENABLE_CACHING) cat("  Cache:", CACHE_DIR, "\n")
 
 cat("\n==============================================================================\n")
-cat("PROCESSING COMPLETE\n")
+cat("PROCESSING COMPLETE - MATCHING CE_COLLAB EXACTLY\n")
+cat("Coastline cropped | Plot extent fixed | Resolution: 500m\n")
 cat("==============================================================================\n")
