@@ -27,7 +27,7 @@
 setup_packages <- function() {
   # Core packages needed
   pkgs <- c("dplyr", "readr", "lubridate", "ggplot2", "stringr", 
-            "tidyr", "sf", "ggspatial", "ggpattern", "writexl")
+            "tidyr", "sf", "ggspatial", "ggpattern", "writexl", "png")
   
   # Optional performance packages
   if (exists("use_datatable") && use_datatable) pkgs <- c(pkgs, "data.table")
@@ -60,7 +60,7 @@ dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 # Grid and filtering parameters
 grid_km <- 25                    # Grid cell size in kilometers
 min_records_all <- 5             # Minimum records to show normalized maps
-year_min <- 2000                 # Start year for data filter
+year_min <- 2010                 # Start year for data filter
 year_max <- 2025                 # End year for data filter
 bbox_lonlat <- NULL              # Optional: c(xmin, xmax, ymin, ymax)
 log_transform_all <- TRUE        # Log-transform coverage map to reduce bias
@@ -325,11 +325,13 @@ cell_m <- grid_km * 1000  # Convert km to meters
 
 df <- df %>%
   mutate(
-    gx = floor(x_m / cell_m),        # Grid X index
-    gy = floor(y_m / cell_m),        # Grid Y index
-    cell_id = paste0(gx, "_", gy),   # Unique cell identifier
-    x0 = gx * cell_m,                # Cell lower-left X coordinate
-    y0 = gy * cell_m                 # Cell lower-left Y coordinate
+    gx = floor(x_m / cell_m),
+    gy = floor(y_m / cell_m),
+    cell_id = paste0(gx, "_", gy),
+    x0 = gx * cell_m,
+    y0 = gy * cell_m,
+    xc = x0 + cell_m/2,
+    yc = y0 + cell_m/2
   )
 
 # ==============================================================================
@@ -398,8 +400,8 @@ if (use_datatable) {
 message("\n=== Calculating map extent ===")
 
 # Use data extent (not study area) to avoid cropping
-xlims <- range(dt$x0, na.rm = TRUE) + c(-cell_m/2, cell_m/2)
-ylims <- range(dt$y0, na.rm = TRUE) + c(-cell_m/2, cell_m/2)
+xlims <- range(dt$xc, na.rm = TRUE) + c(-cell_m/2, cell_m/2)
+ylims <- range(dt$yc, na.rm = TRUE) + c(-cell_m/2, cell_m/2)
 message(sprintf("  X: [%.0f, %.0f] | Y: [%.0f, %.0f]", 
                 xlims[1], xlims[2], ylims[1], ylims[2]))
 
@@ -423,12 +425,12 @@ if (use_datatable && data.table::is.data.table(dt)) {
   cell_all <- dt[, .(
     n_all = sum(w, na.rm = TRUE),
     n_years = data.table::uniqueN(year, na.rm = TRUE)
-  ), by = .(cell_id, gx, gy, x0, y0)]
+  ), by = .(cell_id, gx, gy, xc, yc)]
   cell_all <- as_tibble(cell_all)
 } else {
   # Standard dplyr aggregation
   cell_all <- dt %>%
-    group_by(cell_id, gx, gy, x0, y0) %>%
+    group_by(cell_id, gx, gy, xc, yc) %>%
     summarise(
       n_all = sum(w, na.rm = TRUE),
       n_years = n_distinct(year, na.rm = TRUE),
@@ -515,7 +517,7 @@ if (log_transform_all) {
 
 # Create plot
 p_all <- ggplot(cell_all) +
-  geom_tile(aes(x = x0, y = y0, fill = n_all_display)) +
+  geom_tile(aes(x = xc, y = yc, fill = n_all_display)) +
   {if (log_transform_all) {
     scale_fill_viridis_c(
       option = "viridis", na.value = "grey90", name = "Count",
@@ -569,10 +571,11 @@ cell_all_pattern <- cell_all %>%
 # Create plot with diagonal hatching for low-coverage areas
 p_conf <- ggplot(cell_all_pattern) +
   ggpattern::geom_tile_pattern(
-    aes(x = x0, y = y0, fill = confidence,
+    aes(x = xc, y = yc, fill = confidence,
         pattern = ifelse(low_coverage, "stripe", "none")),
     pattern_fill = "white", pattern_color = "white", 
-    pattern_density = 0.02, pattern_spacing = 0.015,
+    width = cell_m, height = cell_m,
+        pattern_density = 0.02, pattern_spacing = 0.015,
     pattern_angle = 45, pattern_alpha = 0.5
   ) +
   scale_fill_manual(values = confidence_colors, name = "Data coverage", drop = FALSE) +
@@ -652,7 +655,8 @@ create_target_maps <- function(nm, target_regex, dt_input, cell_all_conf, use_dt
     cell_sum <- dt_input[, .(
       n_all = sum(w, na.rm = TRUE),
       n_target = sum(w * stringr::str_detect(name_blob, target_regex), na.rm = TRUE)
-    ), by = .(cell_id, gx, gy, x0, y0)]
+    ), by = .(cell_id, gx, gy, x0, y0, xc, yc)
+        ]
     
     # Get target-specific years
     target_years <- dt_input[
@@ -668,7 +672,7 @@ create_target_maps <- function(nm, target_regex, dt_input, cell_all_conf, use_dt
     # Standard dplyr aggregation (use this if dt_input is not a data.table)
     cell_sum <- dt_input %>%
       mutate(is_target = stringr::str_detect(name_blob, target_regex)) %>%
-      group_by(cell_id, gx, gy, x0, y0) %>%
+      group_by(cell_id, gx, gy, xc, yc) %>%
       summarise(
         n_all = sum(w, na.rm = TRUE),
         n_target = sum(w[is_target], na.rm = TRUE),
@@ -759,7 +763,7 @@ create_target_maps <- function(nm, target_regex, dt_input, cell_all_conf, use_dt
   
   # --- MAP 1: RAW COUNTS ---
   p1 <- ggplot(cell_sum) +
-    geom_tile(aes(x = x0, y = y0, fill = n_target)) +
+    geom_tile(aes(x = xc, y = yc, fill = n_target)) +
     scale_fill_viridis_c(
       option = target_palettes[[nm]], na.value = "grey90", 
       name = "Count", begin = 0.10, end = 0.95
@@ -791,9 +795,11 @@ create_target_maps <- function(nm, target_regex, dt_input, cell_all_conf, use_dt
   
   p2 <- ggplot(cell_sum) +
     ggpattern::geom_tile_pattern(
-      aes(x = x0, y = y0, fill = share_target, 
+      aes(x = xc, y = yc, fill = share_target, 
           pattern = ifelse(low_coverage, "stripe", "none")),
       pattern_fill = "white", pattern_color = "white", 
+      width = cell_m, height = cell_m,
+      
       pattern_density = 0.03, pattern_spacing = 0.015,
       pattern_angle = 45, pattern_alpha = 1.0, pattern_linewidth = 0.5
     ) +
@@ -805,7 +811,7 @@ create_target_maps <- function(nm, target_regex, dt_input, cell_all_conf, use_dt
     scale_pattern_manual(values = c("none" = "none", "stripe" = "stripe"), guide = "none") +
     # Add white outline for low-coverage cells
     {if(nrow(low_conf_cells) > 0) {
-      geom_tile(data = low_conf_cells, aes(x = x0, y = y0), 
+      geom_tile(data = low_conf_cells, aes(x = xc, y = yc), 
                 fill = NA, color = "white", linewidth = 0.6)
     }} +
     labs(
@@ -1013,15 +1019,27 @@ if (make_species_maps) {
     if (use_dt && data.table::is.data.table(dt_input)) {
       cell_sp <- dt_input[get(species_field) == sp_label, .(
         n_sp = sum(w, na.rm = TRUE)
-      ), by = .(cell_id, gx, gy, x0, y0)]
+      ), by = .(cell_id, gx, gy, xc, yc)]
       cell_sp <- as_tibble(cell_sp)
     } else {
       # Use dplyr regardless of use_dt setting if not a data.table
       cell_sp <- dt_input %>%
         filter(.data[[species_field]] == sp_label) %>%
-        group_by(cell_id, gx, gy, x0, y0) %>%
+        group_by(cell_id, gx, gy, xc, yc) %>%
         summarise(n_sp = sum(w, na.rm = TRUE), .groups = "drop")
     }
+    # Also grab the raw point locations for this species (for hollow grey points)
+    if (use_dt && data.table::is.data.table(dt_input)) {
+      pts_sp <- dt_input[get(species_field) == sp_label, .(x_m, y_m)]
+      pts_sp <- as.data.frame(pts_sp)
+    } else {
+      pts_sp <- dt_input %>%
+        filter(.data[[species_field]] == sp_label) %>%
+        select(x_m, y_m)
+    }
+    
+    # Optional: drop rows with missing coords (just in case)
+    pts_sp <- pts_sp %>% dplyr::filter(!is.na(x_m), !is.na(y_m))
     
     if (nrow(cell_sp) == 0) return(invisible(NULL))
     
@@ -1058,23 +1076,35 @@ if (make_species_maps) {
       cell_id = paste0("dummy_", species_map_labels),
       gx = rep(NA_real_, length(species_map_labels)),
       gy = rep(NA_real_, length(species_map_labels)),
-      x0 = rep(NA_real_, length(species_map_labels)),
-      y0 = rep(NA_real_, length(species_map_labels)),
+      xc = rep(NA_real_, length(species_map_labels)),
+      yc = rep(NA_real_, length(species_map_labels)),
       n_sp = rep(NA_real_, length(species_map_labels)),
       count_category = factor(species_map_labels, levels = species_map_labels)
     )
     
-    # Combine with actual data (dummy rows won't plot because x0/y0 are NA)
+    # Combine with actual data (dummy rows won't plot because xc/yc are NA)
     cell_sp_with_dummies <- bind_rows(cell_sp, all_categories)
     
     # Create map with categorical bins
     p <- ggplot(cell_sp_with_dummies) +
-      geom_tile(aes(x = x0, y = y0, fill = count_category)) +
+      geom_tile(aes(x = xc, y = yc, fill = count_category),
+                width = cell_m, height = cell_m) +
       scale_fill_manual(
         values = category_colors,
         name = "Sightings",
         na.value = "grey90",
         drop = FALSE  # Show all categories in legend even if not present
+      ) +
+      geom_point(
+        data = pts_sp,
+        aes(x = x_m, y = y_m),
+        inherit.aes = FALSE,
+        shape = 21,
+        fill = NA,
+        color = "grey40",
+        alpha = 0.6,
+        size = 1,
+        stroke = 0.35
       ) +
       labs(
         title = paste0("Opportunistic sightings: ", sp_label),
